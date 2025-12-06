@@ -207,7 +207,11 @@ def _create_session_store() -> SessionStore:
     settings.session_store_backend.
     """
     settings = get_settings()
+    # If a REDIS_URL is provided, prefer redis even when the backend setting is
+    # left at the default. This enables shared sessions in multi-replica setups.
     backend = getattr(settings, "session_store_backend", "memory").lower()
+    if backend == "memory" and os.getenv("REDIS_URL"):
+        backend = "redis"
     if backend == "redis":
         if redis is None:
             logging.getLogger(__name__).warning(

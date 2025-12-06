@@ -16,6 +16,7 @@ def test_session_store_defaults_to_inmemory_when_configured_as_memory(
         "get_settings",
         lambda: _DummySettings(session_store_backend="memory"),
     )
+    monkeypatch.delenv("REDIS_URL", raising=False)
 
     store = sessions._create_session_store()
     assert isinstance(store, sessions.InMemorySessionStore)
@@ -93,4 +94,33 @@ def test_session_store_uses_redis_when_available(monkeypatch, tmp_path) -> None:
     assert ended is not None
     assert ended.status == "COMPLETED"
     assert dummy_module.last_url == "redis://test-redis:6379/1"
+
+
+def test_session_store_prefers_redis_when_url_present(monkeypatch) -> None:
+    monkeypatch.setattr(
+        sessions,
+        "get_settings",
+        # Simulate default "memory" setting, but REDIS_URL provided.
+        lambda: _DummySettings(session_store_backend="memory"),
+    )
+
+    class DummyRedisClient:
+        def __init__(self) -> None:
+            self._data: dict[str, str] = {}
+
+        def setex(self, key: str, ttl: int, value: str) -> None:
+            self._data[key] = value
+
+        def get(self, key: str) -> str | None:
+            return self._data.get(key)
+
+    class DummyRedisModule:
+        def from_url(self, url: str) -> DummyRedisClient:
+            return DummyRedisClient()
+
+    monkeypatch.setattr(sessions, "redis", DummyRedisModule())
+    monkeypatch.setenv("REDIS_URL", "redis://auto:6379/0")
+
+    store = sessions._create_session_store()
+    assert isinstance(store, sessions.RedisSessionStore)
 

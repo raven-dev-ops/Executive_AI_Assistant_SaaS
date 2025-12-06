@@ -16,6 +16,20 @@ def test_derive_neighborhood_label_falls_back_to_unspecified() -> None:
     assert geo_utils.derive_neighborhood_label("No commas or zips here") == "unspecified"
 
 
+def test_geocode_address_returns_none_without_api_key(monkeypatch) -> None:
+    called = {"count": 0}
+
+    def fake_httpx_get(*args, **kwargs):
+        called["count"] += 1
+        raise AssertionError("httpx.get should not be called without API key")
+
+    monkeypatch.setenv("GOOGLE_MAPS_API_KEY", "")
+    monkeypatch.setattr(geo_utils, "httpx", type("H", (), {"get": fake_httpx_get}))
+
+    assert geo_utils.geocode_address("123 Main St") is None
+    assert called["count"] == 0
+
+
 def test_fetch_zip_income_rejects_invalid_or_short_zip() -> None:
     profile = zip_enrichment.fetch_zip_income("12")
     assert profile.zip_code == "12"

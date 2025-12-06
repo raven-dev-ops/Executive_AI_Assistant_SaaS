@@ -4,6 +4,17 @@
     <meta charset="utf-8" />
     <title>AI Telephony Dashboard</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-sA+e2atSaNVD45Hxbp2FKs1rGgRkGzm4nFv9Z8M0A+E="
+      crossorigin=""
+    />
+    <script
+      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+      integrity="sha256-o9N1j7kGStGk6Z6pU4bYdVQKjFVjJ7gE0l2l9h8b+3E="
+      crossorigin=""
+    ></script>
     <style>
       * {
         margin: 0;
@@ -331,6 +342,13 @@
         font-size: 0.75rem;
         color: #64748b;
         font-weight: 600;
+      }
+
+      .map-container {
+        height: 320px;
+        border-radius: 12px;
+        overflow: hidden;
+        border: 1px solid #e2e8f0;
       }
       
       body.dark {
@@ -1060,6 +1078,8 @@
       let calendar90dData = null;
       let ownerAssistantOpen = false;
       let ownerAssistantBusy = false;
+      let geoMap = null;
+      let geoLayer = null;
       let ownerServiceTier = null;
 
       function updateConnectionStatus(state) {
@@ -1474,11 +1494,77 @@
         }
       }
 
-        async function loadServiceMetrics() {
-          const el = document.getElementById("service-metrics-content");
-          if (!el) return;
-          if (!featureEnabledForTier("100")) {
-            el.innerHTML = '<div class="empty-state">Upgrade to the Growth plan ($100/mo) to unlock detailed service metrics.</div>';
+      function ensureGeoCard() {
+        const grid = document.querySelector(".dashboard-grid");
+        if (!grid) return;
+        if (document.getElementById("geo-map-card")) return;
+        const card = document.createElement("div");
+        card.className = "card";
+        card.id = "geo-map-card";
+        card.innerHTML = `
+          <div class="card-header">
+            <div class="card-icon">
+              <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5S10.62 6.5 12 6.5s2.5 1.12 2.5 2.5S13.38 11.5 12 11.5z"/>
+              </svg>
+            </div>
+            <h2>Service Map (last 30 days)</h2>
+            <button id="refresh-geo-map" type="button" class="secondary">Refresh</button>
+          </div>
+          <div id="geo-map" class="map-container"></div>
+          <div id="geo-map-status" style="margin-top:0.5rem; font-size:0.85rem; color:#64748b;"></div>
+        `;
+        grid.prepend(card);
+      }
+
+      async function loadGeoMarkers() {
+        ensureGeoCard();
+        const statusEl = document.getElementById("geo-map-status");
+        const mapEl = document.getElementById("geo-map");
+        if (!mapEl) return;
+        if (statusEl) statusEl.textContent = "Loading map markers...";
+        try {
+          const data = await fetchJson("/v1/owner/geo/markers?days=30");
+          const markers = Array.isArray(data?.markers) ? data.markers : [];
+          if (!geoMap) {
+            geoMap = L.map("geo-map").setView([39.0997, -94.5786], 11);
+            L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+              attribution: "&copy; OpenStreetMap contributors",
+            }).addTo(geoMap);
+            geoLayer = L.layerGroup().addTo(geoMap);
+          }
+          geoLayer.clearLayers();
+          if (!markers.length) {
+            if (statusEl) statusEl.textContent = "No geocoded appointments yet.";
+            return;
+          }
+          markers.forEach((m) => {
+            const color = m.is_emergency ? "#ef4444" : "#3b82f6";
+            const circle = L.circleMarker([m.lat, m.lng], {
+              radius: m.is_emergency ? 8 : 6,
+              color,
+              fillColor: color,
+              fillOpacity: 0.7,
+            }).addTo(geoLayer);
+            circle.bindPopup(`
+              <strong>${escapeHtml(m.label || "Unknown area")}</strong><br/>
+              ${escapeHtml(m.address || "")}<br/>
+              ${escapeHtml(m.service_type || "service")} ${m.is_emergency ? "(emergency)" : ""}
+            `);
+          });
+          geoMap.fitBounds(geoLayer.getBounds(), { maxZoom: 13 });
+          if (statusEl) statusEl.textContent = `${markers.length} locations mapped`;
+        } catch (err) {
+          console.error("Error loading geo markers", err);
+          if (statusEl) statusEl.textContent = "Unable to load map data";
+        }
+      }
+
+      async function loadServiceMetrics() {
+        const el = document.getElementById("service-metrics-content");
+        if (!el) return;
+        if (!featureEnabledForTier("100")) {
+          el.innerHTML = '<div class="empty-state">Upgrade to the Growth plan ($100/mo) to unlock detailed service metrics.</div>';
             return;
           }
           el.innerHTML = '<div class="loading">Loading</div>';
@@ -1976,6 +2062,7 @@
         document.getElementById("refresh-emergencies")?.addEventListener("click", loadEmergencyJobs);
         document.getElementById("refresh-analytics")?.addEventListener("click", loadAnalytics);
         document.getElementById("refresh-conversations")?.addEventListener("click", loadConversations);
+        document.getElementById("refresh-geo-map")?.addEventListener("click", loadGeoMarkers);
 
         document.getElementById("download-service-mix")?.addEventListener("click", () => {
           window.open(backendBase + "/v1/owner/export/service-mix.csv", "_blank");
@@ -1993,6 +2080,7 @@
           loadZipWealth();
           loadCalendar90d();
           loadServiceMetrics();
+          loadGeoMarkers();
           loadConversations();
         });
       }
@@ -2013,6 +2101,7 @@
         loadZipWealth();
         loadCalendar90d();
         loadServiceMetrics();
+        loadGeoMarkers();
         loadConversations();
       });
     </script>

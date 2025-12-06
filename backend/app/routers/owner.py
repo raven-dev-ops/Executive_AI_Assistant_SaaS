@@ -20,7 +20,7 @@ from ..db_models import (
     TechnicianDB,
 )
 from ..metrics import metrics
-from ..services.geo_utils import derive_neighborhood_label
+from ..services.geo_utils import derive_neighborhood_label, geocode_address
 from ..services.zip_enrichment import fetch_zip_income
 from ..business_config import get_voice_for_business
 
@@ -1446,6 +1446,21 @@ class OwnerNeighborhoodResponse(BaseModel):
     items: list[OwnerNeighborhoodItem]
 
 
+class OwnerGeoMarker(BaseModel):
+    lat: float
+    lng: float
+    label: str
+    address: str | None = None
+    service_type: str | None = None
+    is_emergency: bool = False
+    appointment_id: str | None = None
+
+
+class OwnerGeoMarkersResponse(BaseModel):
+    window_days: int
+    markers: list[OwnerGeoMarker]
+
+
 class OwnerServiceMetricsItem(BaseModel):
     service_type: str
     appointments: int
@@ -1861,6 +1876,49 @@ def owner_neighborhoods(
     items.sort(key=lambda i: i.estimated_value_total, reverse=True)
 
     return OwnerNeighborhoodResponse(window_days=days, items=items)
+
+
+@router.get("/geo/markers", response_model=OwnerGeoMarkersResponse)
+def owner_geo_markers(
+    business_id: str = Depends(ensure_business_active),
+    days: int = Query(30, ge=1, le=365),
+) -> OwnerGeoMarkersResponse:
+    """Return geocoded appointment markers for map visualization."""
+    now = datetime.now(UTC)
+    window_start = now - timedelta(days=days)
+    markers: list[OwnerGeoMarker] = []
+    geo_cache: dict[str, tuple[float, float] | None] = {}
+
+    for appt in appointments_repo.list_for_business(business_id):
+        if getattr(appt, "start_time", None) and appt.start_time < window_start:
+            continue
+        customer = customers_repo.get(appt.customer_id)
+        address = customer.address if customer else None
+        if not address:
+            continue
+        if address in geo_cache:
+            coords = geo_cache[address]
+        else:
+            coords = geocode_address(address)
+            geo_cache[address] = coords
+        if not coords:
+            continue
+        lat, lng = coords
+        markers.append(
+            OwnerGeoMarker(
+                lat=lat,
+                lng=lng,
+                label=derive_neighborhood_label(address),
+                address=address,
+                service_type=getattr(appt, "service_type", None),
+                is_emergency=bool(getattr(appt, "is_emergency", False)),
+                appointment_id=appt.id,
+            )
+        )
+        if len(markers) >= 200:
+            break
+
+    return OwnerGeoMarkersResponse(window_days=days, markers=markers)
 
 
 @router.get("/service-metrics", response_model=OwnerServiceMetricsResponse)

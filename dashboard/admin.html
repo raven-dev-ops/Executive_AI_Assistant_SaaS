@@ -1221,6 +1221,10 @@
             const errorBar = alertFlag
               ? `<div style="height:6px; border-radius:4px; background: linear-gradient(90deg, #ef4444 0%, #ef4444 100%); margin-top:4px; opacity:0.9;"></div>`
               : "";
+            const growth = appts30 && u.appointments_last_7_days
+              ? Math.round((u.appointments_last_7_days / appts30) * 100)
+              : 0;
+            const growthLabel = growth ? `${growth}% of 30d in past 7d` : "";
             return `
               <tr${muted}>
                 <td>
@@ -1238,7 +1242,36 @@
           })
           .join("");
 
+        const top = sorted
+          .filter((u) => (u.appointments_last_30_days || 0) > 0)
+          .slice(0, 5);
+
+        const summary = top
+          .map((u) => {
+            const appts30 = u.appointments_last_30_days || 0;
+            const emergencies = u.emergencies_last_30_days || 0;
+            const pctEmerg = appts30 ? Math.round((emergencies / appts30) * 100) : 0;
+            const width = Math.min(100, Math.max(5, appts30));
+            return `
+              <div style="margin-bottom: 0.6rem;">
+                <div style="display:flex; justify-content:space-between; font-size:0.85rem;">
+                  <strong>${escapeHtml(u.name || u.id)}</strong>
+                  <span>${formatNumber(appts30)} appts</span>
+                </div>
+                <div style="height:8px; border-radius:6px; background:#e2e8f0; overflow:hidden; margin-top:4px;">
+                  <div style="width:${width}%; height:100%; background:linear-gradient(90deg,#4f46e5,#38bdf8);"></div>
+                </div>
+                <div style="font-size:0.75rem; color:#64748b;">${pctEmerg}% emergency, ${formatNumber(u.sms_total_messages || 0)} SMS</div>
+              </div>
+            `;
+          })
+          .join("");
+
         el.innerHTML = `
+          <div style="margin-bottom:1rem;">
+            <div style="font-weight:600; margin-bottom:0.35rem;">Top tenants (30d appointments)</div>
+            ${summary || '<div class="empty-state" style="padding:0.75rem;">No activity yet</div>'}
+          </div>
           <table>
             <thead>
               <tr>

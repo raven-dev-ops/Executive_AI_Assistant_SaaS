@@ -698,6 +698,7 @@ async def propose_appointment_slots(
         business_id=business_id,
         is_emergency=getattr(appt, "is_emergency", False),
         technician_id=getattr(appt, "technician_id", None),
+        address=getattr(customers_repo.get(appt.customer_id), "address", None),
     )
     if not slots:
         return []

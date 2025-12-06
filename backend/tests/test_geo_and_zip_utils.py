@@ -101,3 +101,8 @@ def test_fetch_zip_income_handles_parse_errors(monkeypatch) -> None:
     assert profile.median_household_income is None
     assert profile.source == "census_acs_2022"
     assert profile.error == "parse_error"
+
+
+def test_haversine_km_basic() -> None:
+    km = geo_utils.haversine_km((39.0997, -94.5786), (38.6270, -90.1994))  # KC to STL
+    assert 350 <= km <= 420

@@ -4,6 +4,7 @@ import re
 import os
 from typing import Tuple
 import httpx
+import math
 
 
 ZIP_RE = re.compile(r"\b(\d{5})\b")
@@ -82,3 +83,18 @@ def geocode_address(address: str | None) -> Tuple[float, float] | None:
     except Exception:
         _GEOCODE_CACHE[addr] = None
         return None
+
+
+def haversine_km(a: tuple[float, float], b: tuple[float, float]) -> float:
+    """Return approximate kilometers between two (lat, lng) pairs."""
+    (lat1, lon1), (lat2, lon2) = a, b
+    R = 6371  # Earth radius km
+    dlat = math.radians(lat2 - lat1)
+    dlon = math.radians(lon2 - lon1)
+    lat1_r = math.radians(lat1)
+    lat2_r = math.radians(lat2)
+    h = (
+        math.sin(dlat / 2) ** 2
+        + math.cos(lat1_r) * math.cos(lat2_r) * math.sin(dlon / 2) ** 2
+    )
+    return 2 * R * math.asin(math.sqrt(h))

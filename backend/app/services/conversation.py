@@ -518,6 +518,7 @@ class ConversationManager:
                 duration_minutes=duration_minutes,
                 calendar_id=calendar_id,
                 business_id=business_id,
+                address=session.address,
                 is_emergency=session.is_emergency,
             )
             slot: TimeSlot | None = slots[0] if slots else None
@@ -589,6 +590,7 @@ class ConversationManager:
                     calendar_id=calendar_id,
                     business_id=business_id,
                     is_emergency=session.is_emergency,
+                    address=session.address,
                 )
                 slot = slots[0] if slots else None
                 if not slot:

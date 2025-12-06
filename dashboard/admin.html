@@ -1216,6 +1216,11 @@
             const statusLabel = escapeHtml((u.status || "ACTIVE").toUpperCase());
             const alertFlag = (u.twilio_voice_errors || 0) > 0 || (u.twilio_sms_errors || 0) > 0;
             const muted = (u.appointments_last_30_days || 0) === 0 ? ' style="opacity:0.7;"' : "";
+            const appts30 = u.appointments_last_30_days || 0;
+            const smsTotal = u.sms_total_messages || (u.sms_owner_messages || 0) + (u.sms_customer_messages || 0);
+            const errorBar = alertFlag
+              ? `<div style="height:6px; border-radius:4px; background: linear-gradient(90deg, #ef4444 0%, #ef4444 100%); margin-top:4px; opacity:0.9;"></div>`
+              : "";
             return `
               <tr${muted}>
                 <td>
@@ -1223,7 +1228,7 @@
                   <small class="muted">${escapeHtml(u.id)}</small>
                 </td>
                 <td><span class="status-tag ${statusClass}">${statusLabel}</span></td>
-                <td>${formatNumber(u.appointments_last_30_days)} (30d)<br/><small class="muted">${formatNumber(u.appointments_last_7_days)} in 7d</small></td>
+                <td>${formatNumber(appts30)} (30d)<br/><small class="muted">${formatNumber(u.appointments_last_7_days)} in 7d</small>${errorBar}</td>
                 <td>${formatNumber(u.emergencies_last_30_days)}<br/><small class="muted">${formatNumber(u.emergencies_last_7_days)} in 7d</small></td>
                 <td>${formatNumber(u.sms_owner_messages)} owner<br/><small class="muted">${formatNumber(u.sms_customer_messages)} customer</small></td>
                 <td>${formatNumber(u.total_customers)} customers<br/><small class="muted">${formatNumber(u.total_conversations)} convos</small></td>

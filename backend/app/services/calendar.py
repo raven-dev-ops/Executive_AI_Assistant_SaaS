@@ -234,6 +234,7 @@ class CalendarService:
         business_id: str | None = None,
         is_emergency: bool | None = None,
         technician_id: str | None = None,
+        address: str | None = None,
     ) -> List[TimeSlot]:
         if not self._client:
             # Stub implementation with basic capacity and routing constraints.
@@ -350,11 +351,25 @@ class CalendarService:
                 for appt in day_appts:
                     appt_start = getattr(appt, "start_time")
                     appt_end = getattr(appt, "end_time")
-                    if travel_buffer_minutes > 0:
-                        appt_start = appt_start - timedelta(
-                            minutes=travel_buffer_minutes
-                        )
-                        appt_end = appt_end + timedelta(minutes=travel_buffer_minutes)
+                    buffer_minutes = travel_buffer_minutes
+                    if address and getattr(appt, "address", None):
+                        try:
+                            from ..services.geo_utils import geocode_address, haversine_km
+
+                            prev_coords = geocode_address(getattr(appt, "address"))
+                            next_coords = geocode_address(address)
+                            if prev_coords and next_coords:
+                                km = haversine_km(prev_coords, next_coords)
+                                # Assume average travel speed 40 km/h, add a 10-minute pad.
+                                buffer_minutes = max(
+                                    buffer_minutes, int((km / 40) * 60) + 10
+                                )
+                        except Exception:
+                            buffer_minutes = travel_buffer_minutes
+
+                    if buffer_minutes > 0:
+                        appt_start = appt_start - timedelta(minutes=buffer_minutes)
+                        appt_end = appt_end + timedelta(minutes=buffer_minutes)
                     busy_ranges.append((appt_start, appt_end))
 
                 busy_ranges.sort(key=lambda r: r[0])

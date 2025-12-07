@@ -50,6 +50,5 @@ def test_metrics_prometheus_exposes_core_counters_and_route_labels() -> None:
     assert "ai_telephony_voice_session_requests" in text
 
     # Per-route metrics should include a label with the path.
-    assert 'ai_telephony_route_request_count{' in text
+    assert "ai_telephony_route_request_count{" in text
     assert 'path="/metrics/prometheus"' in text
-

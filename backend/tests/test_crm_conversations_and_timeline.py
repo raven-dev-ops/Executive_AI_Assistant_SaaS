@@ -20,7 +20,9 @@ def _reset_repos() -> None:
     customers_repo._by_business.clear()  # type: ignore[attr-defined]
 
 
-def test_list_conversations_maps_service_type_and_has_appointments_per_customer() -> None:
+def test_list_conversations_maps_service_type_and_has_appointments_per_customer() -> (
+    None
+):
     _reset_repos()
 
     # Customer with an active appointment and multiple conversations.
@@ -74,7 +76,9 @@ def test_list_conversations_maps_service_type_and_has_appointments_per_customer(
         assert item["message_count"] == 1
 
 
-def test_customer_timeline_interleaves_appointments_and_conversations_per_tenant() -> None:
+def test_customer_timeline_interleaves_appointments_and_conversations_per_tenant() -> (
+    None
+):
     _reset_repos()
 
     # Customer in default tenant with one appointment and one conversation.
@@ -138,4 +142,3 @@ def test_customer_timeline_interleaves_appointments_and_conversations_per_tenant
     assert conv.id in ids
     # Other-tenant conversation must not show up.
     assert conv_other.id not in ids
-

@@ -81,7 +81,9 @@ def test_session_store_uses_redis_when_available(monkeypatch, tmp_path) -> None:
     store = sessions._create_session_store()
     assert isinstance(store, sessions.RedisSessionStore)
 
-    session = store.create(caller_phone="555-0100", business_id="b1", lead_source="test")
+    session = store.create(
+        caller_phone="555-0100", business_id="b1", lead_source="test"
+    )
     assert session.id
     fetched = store.get(session.id)
     assert fetched is not None
@@ -121,4 +123,3 @@ def test_session_store_prefers_redis_when_url_present(monkeypatch) -> None:
 
     store = sessions._create_session_store()
     assert isinstance(store, sessions.RedisSessionStore)
-

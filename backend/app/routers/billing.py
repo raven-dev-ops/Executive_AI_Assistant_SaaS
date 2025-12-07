@@ -56,7 +56,12 @@ def _plans_from_settings() -> List[Plan]:
             interval="month",
             price_cents=10000,
             stripe_price_id=stripe_cfg.price_growth,
-            features=["Everything in Starter", "Analytics", "Owner AI assistant", "Widget"],
+            features=[
+                "Everything in Starter",
+                "Analytics",
+                "Owner AI assistant",
+                "Widget",
+            ],
         ),
         Plan(
             id="scale",
@@ -125,7 +130,9 @@ def create_checkout_session(
 
     # Real Stripe call would go here; returning a placeholder for now.
     url = f"https://checkout.stripe.com/pay/{plan.stripe_price_id}"
-    return CheckoutSessionResponse(url=url, session_id=f"session_{plan.stripe_price_id}")
+    return CheckoutSessionResponse(
+        url=url, session_id=f"session_{plan.stripe_price_id}"
+    )
 
 
 @router.post("/webhook")
@@ -143,14 +150,14 @@ async def billing_webhook(
 
     event_type = payload.get("type", "")
     data_obj = payload.get("data", {}).get("object", {})
-    business_id = (
-        data_obj.get("metadata", {}).get("business_id") or "default_business"
-    )
+    business_id = data_obj.get("metadata", {}).get("business_id") or "default_business"
     customer_id = data_obj.get("customer")
     subscription_id = data_obj.get("subscription") or data_obj.get("id")
     period_end = data_obj.get("current_period_end")
     current_period_end = (
-        datetime.fromtimestamp(period_end, UTC) if isinstance(period_end, (int, float)) else None
+        datetime.fromtimestamp(period_end, UTC)
+        if isinstance(period_end, (int, float))
+        else None
     )
 
     try:
@@ -169,18 +176,18 @@ async def billing_webhook(
                     "business_id": business_id,
                     "customer_id": customer_id,
                     "subscription_id": subscription_id,
-                    "period_end": current_period_end.isoformat()
-                    if current_period_end
-                    else None,
+                    "period_end": (
+                        current_period_end.isoformat() if current_period_end else None
+                    ),
                 },
             )
             return {"status": "ok"}
         elif event_type in {"invoice.payment_failed", "customer.subscription.deleted"}:
             _update_subscription(
                 business_id,
-                status="past_due"
-                if event_type == "invoice.payment_failed"
-                else "canceled",
+                status=(
+                    "past_due" if event_type == "invoice.payment_failed" else "canceled"
+                ),
                 customer_id=customer_id,
                 subscription_id=subscription_id,
                 current_period_end=current_period_end,

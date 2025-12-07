@@ -63,6 +63,7 @@ class QuickBooksSettings(BaseModel):
             else "https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer"
         )
 
+
 class StripeSettings(BaseModel):
     api_key: str | None = None
     webhook_secret: str | None = None

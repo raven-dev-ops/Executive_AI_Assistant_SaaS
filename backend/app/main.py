@@ -227,7 +227,9 @@ def create_app() -> FastAPI:
         emit("ai_telephony_qbo_connections", float(metrics.qbo_connections))
         emit("ai_telephony_qbo_sync_errors", float(metrics.qbo_sync_errors))
         emit("ai_telephony_contacts_imported", float(metrics.contacts_imported))
-        emit("ai_telephony_contacts_import_errors", float(metrics.contacts_import_errors))
+        emit(
+            "ai_telephony_contacts_import_errors", float(metrics.contacts_import_errors)
+        )
         emit("ai_telephony_chat_messages", float(metrics.chat_messages))
         emit("ai_telephony_chat_failures", float(metrics.chat_failures))
         emit(

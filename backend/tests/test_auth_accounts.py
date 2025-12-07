@@ -11,7 +11,10 @@ client = TestClient(app)
 def test_register_and_set_active_business():
     resp = client.post(
         "/v1/auth/register",
-        params={"email": f"user-{uuid.uuid4().hex[:8]}@example.com", "password": "pw123"},
+        params={
+            "email": f"user-{uuid.uuid4().hex[:8]}@example.com",
+            "password": "pw123",
+        },
     )
     assert resp.status_code == 200
     user = resp.json()

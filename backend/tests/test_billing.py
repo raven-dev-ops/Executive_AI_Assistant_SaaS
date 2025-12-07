@@ -3,6 +3,7 @@ from datetime import UTC, datetime, timedelta
 from fastapi.testclient import TestClient
 
 from app.main import app
+
 client = TestClient(app)
 
 
@@ -12,7 +13,9 @@ def test_list_plans_and_checkout_stub(monkeypatch):
     plans = resp.json()
     assert any(p["id"] == "basic" for p in plans)
 
-    checkout = client.post("/v1/billing/create-checkout-session", params={"plan_id": "basic"})
+    checkout = client.post(
+        "/v1/billing/create-checkout-session", params={"plan_id": "basic"}
+    )
     assert checkout.status_code == 200
     data = checkout.json()
     assert data["url"]

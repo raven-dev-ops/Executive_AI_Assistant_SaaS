@@ -354,7 +354,10 @@ class CalendarService:
                     buffer_minutes = travel_buffer_minutes
                     if address and getattr(appt, "address", None):
                         try:
-                            from ..services.geo_utils import geocode_address, haversine_km
+                            from ..services.geo_utils import (
+                                geocode_address,
+                                haversine_km,
+                            )
 
                             prev_coords = geocode_address(getattr(appt, "address"))
                             next_coords = geocode_address(address)

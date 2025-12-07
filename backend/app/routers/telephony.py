@@ -183,9 +183,7 @@ async def call_audio(payload: CallAudioRequest) -> CallAudioResponse:
         new_state = {"stage": "ERROR", "status": "FAILED"}
 
     if conv:
-        conversations_repo.append_message(
-            conv.id, role="assistant", text=reply_text
-        )
+        conversations_repo.append_message(conv.id, role="assistant", text=reply_text)
 
     return CallAudioResponse(
         reply_text=reply_text,

@@ -10,7 +10,9 @@ async def test_owner_assistant_prompts_on_empty_question() -> None:
 
 
 @pytest.mark.anyio
-async def test_owner_assistant_returns_not_configured_message_when_stub_provider() -> None:
+async def test_owner_assistant_returns_not_configured_message_when_stub_provider() -> (
+    None
+):
     # Ensure the service is in its default "stub" configuration.
     owner_assistant.owner_assistant_service._speech.provider = "stub"  # type: ignore[attr-defined]
     owner_assistant.owner_assistant_service._speech.openai_api_key = None  # type: ignore[attr-defined]

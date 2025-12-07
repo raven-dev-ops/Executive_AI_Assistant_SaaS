@@ -33,7 +33,9 @@ def test_configure_logging_adds_stdout_handler_and_is_idempotent() -> None:
             root.addHandler(handler)
 
 
-def test_get_db_raises_when_sqlalchemy_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_get_db_raises_when_sqlalchemy_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setattr(db, "SQLALCHEMY_AVAILABLE", False)
     monkeypatch.setattr(db, "SessionLocal", None)
 

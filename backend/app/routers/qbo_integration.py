@@ -77,7 +77,9 @@ def _get_status(business_id: str) -> QboStatusResponse:
             row = session.get(BusinessDB, business_id)
             if row:
                 return QboStatusResponse(
-                    connected=(getattr(row, "integration_qbo_status", "") == "connected"),
+                    connected=(
+                        getattr(row, "integration_qbo_status", "") == "connected"
+                    ),
                     realm_id=getattr(row, "qbo_realm_id", None),
                     token_expires_at=getattr(row, "qbo_token_expires_at", None),
                 )
@@ -112,7 +114,9 @@ def authorize_qbo(
 @router.get("/callback", response_model=QboCallbackResponse)
 def callback_qbo(
     code: str = Query(..., description="Authorization code from Intuit"),
-    realmId: str | None = Query(default=None, description="QuickBooks company realm ID"),
+    realmId: str | None = Query(
+        default=None, description="QuickBooks company realm ID"
+    ),
     state: str = Query(..., description="Opaque state containing business_id"),
 ) -> QboCallbackResponse:
     """Handle the QuickBooks OAuth callback and store tokens (stubbed)."""

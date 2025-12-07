@@ -81,7 +81,11 @@ def test_send_retention_campaign_sends_for_eligible_customers() -> None:
 
     resp = client.post(
         "/v1/retention/send-retention",
-        params={"min_days_since_last_visit": 30, "max_messages": 10, "campaign_type": "generic"},
+        params={
+            "min_days_since_last_visit": 30,
+            "max_messages": 10,
+            "campaign_type": "generic",
+        },
     )
     assert resp.status_code == 200
     body = resp.json()
@@ -134,4 +138,3 @@ def test_send_retention_respects_sms_opt_out() -> None:
     per_tenant = metrics.sms_by_business.get("default_business")
     if per_tenant is not None:
         assert per_tenant.retention_messages_sent == 0
-

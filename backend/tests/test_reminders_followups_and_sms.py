@@ -34,7 +34,9 @@ def _reset_repos_and_metrics() -> None:
 
 
 @pytest.mark.anyio
-async def test_send_unbooked_lead_followups_targets_recent_conversations(monkeypatch) -> None:
+async def test_send_unbooked_lead_followups_targets_recent_conversations(
+    monkeypatch,
+) -> None:
     _reset_repos_and_metrics()
 
     now = datetime.now(UTC)
@@ -95,7 +97,9 @@ async def test_send_unbooked_lead_followups_targets_recent_conversations(monkeyp
 
 
 @pytest.mark.anyio
-async def test_sms_service_records_metrics_and_respects_owner_override(monkeypatch) -> None:
+async def test_sms_service_records_metrics_and_respects_owner_override(
+    monkeypatch,
+) -> None:
     # Force stub mode to avoid real Twilio calls.
     sms_service._settings.provider = "stub"  # type: ignore[attr-defined]
     sms_service._settings.owner_number = "+15550007000"  # type: ignore[attr-defined]
@@ -213,12 +217,8 @@ def test_inmemory_twilio_state_prunes_expired_entries() -> None:
     assert store.get_call_session("CA_OLD") is None
     assert store.clear_call_session("CA_OLD") is None
 
-    assert (
-        store.get_sms_conversation("biz-old", "+15550009999") is None
-    )
-    assert (
-        store.clear_sms_conversation("biz-old", "+15550009999") is None
-    )
+    assert store.get_sms_conversation("biz-old", "+15550009999") is None
+    assert store.clear_sms_conversation("biz-old", "+15550009999") is None
 
 
 def test_redis_twilio_state_handles_set_and_delete_errors(monkeypatch) -> None:

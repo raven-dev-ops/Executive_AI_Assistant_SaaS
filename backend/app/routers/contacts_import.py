@@ -108,7 +108,9 @@ def _import_rows(rows: List[dict], business_id: str) -> ImportResult:
 
 @router.post("/import", response_model=ContactImportResponse)
 async def import_contacts(
-    file: UploadFile = File(..., description="CSV file with columns: Name, Phone, Email, Address"),
+    file: UploadFile = File(
+        ..., description="CSV file with columns: Name, Phone, Email, Address"
+    ),
     business_id: str = Depends(ensure_business_active),
 ) -> ContactImportResponse:
     """Import contacts from a CSV file into the current tenant.

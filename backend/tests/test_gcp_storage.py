@@ -21,4 +21,3 @@ def test_gcs_health_reports_library_missing(monkeypatch) -> None:
     assert health.library_available is False
     assert health.can_connect is False
     assert "google-cloud-storage library is not installed" in (health.error or "")
-

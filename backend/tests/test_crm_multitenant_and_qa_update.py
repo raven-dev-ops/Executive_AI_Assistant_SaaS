@@ -66,7 +66,9 @@ def test_update_conversation_qa_persists_flags_tags_outcome_and_notes() -> None:
         business_id="default_business",
         session_id="sess-qa-update",
     )
-    conversations_repo.append_message(conv.id, role="user", text="How much does this cost?")
+    conversations_repo.append_message(
+        conv.id, role="user", text="How much does this cost?"
+    )
     conversations_repo.append_message(
         conv.id, role="assistant", text="We will send you a quote."
     )
@@ -96,4 +98,3 @@ def test_update_conversation_qa_persists_flags_tags_outcome_and_notes() -> None:
     normalize = crm_module._normalize_outcome_label  # type: ignore[attr-defined]
     expected_label = normalize("Quote requested")
     assert qa["likely_outcome"] == expected_label
-

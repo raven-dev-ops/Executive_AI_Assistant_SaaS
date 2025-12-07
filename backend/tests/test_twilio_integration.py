@@ -279,7 +279,9 @@ def test_twilio_voice_unhandled_error_increments_metrics(monkeypatch):
     assert metrics.twilio_voice_errors == 1
 
 
-def test_twilio_missed_call_queue_upgrades_partial_intake_and_respects_statuses(monkeypatch):
+def test_twilio_missed_call_queue_upgrades_partial_intake_and_respects_statuses(
+    monkeypatch,
+):
     # Start with a clean callback queue.
     metrics.callbacks_by_business.clear()
 
@@ -426,9 +428,7 @@ def test_twilio_signature_required_when_enabled(monkeypatch) -> None:
         def __init__(self) -> None:
             self.sms = SmsCfg()
 
-    monkeypatch.setattr(
-        twilio_integration, "get_settings", lambda: DummySettings()
-    )
+    monkeypatch.setattr(twilio_integration, "get_settings", lambda: DummySettings())
 
     # Missing signature header should be rejected with 401.
     resp = client.post(
@@ -452,9 +452,7 @@ def test_twilio_signature_valid_allows_request(monkeypatch) -> None:
         def __init__(self) -> None:
             self.sms = SmsCfg()
 
-    monkeypatch.setattr(
-        twilio_integration, "get_settings", lambda: DummySettings()
-    )
+    monkeypatch.setattr(twilio_integration, "get_settings", lambda: DummySettings())
 
     path = "/twilio/sms"
     form = {"From": "+15550000001", "Body": "Hello"}
@@ -516,9 +514,7 @@ def test_twilio_say_language_attr_uses_sms_settings(monkeypatch) -> None:
         def __init__(self) -> None:
             self.sms = SmsCfg()
 
-    monkeypatch.setattr(
-        twilio_integration, "get_settings", lambda: DummySettings()
-    )
+    monkeypatch.setattr(twilio_integration, "get_settings", lambda: DummySettings())
 
     # English / default language.
     attr_en = twilio_integration._twilio_say_language_attr("en")  # type: ignore[attr-defined]

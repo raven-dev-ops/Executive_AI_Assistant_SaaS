@@ -44,7 +44,9 @@ def test_get_calendar_id_for_business_uses_db_override() -> None:
     )
 
 
-def test_get_calendar_id_for_business_falls_back_when_db_unavailable(monkeypatch) -> None:
+def test_get_calendar_id_for_business_falls_back_when_db_unavailable(
+    monkeypatch,
+) -> None:
     settings = get_settings()
     default_id = settings.calendar.calendar_id
 
@@ -104,7 +106,4 @@ def test_language_vertical_and_voice_overrides_and_defaults() -> None:
         == default_vertical
     )
     assert business_config.get_voice_for_business(None) == default_voice
-    assert (
-        business_config.get_voice_for_business("unknown-business") == default_voice
-    )
-
+    assert business_config.get_voice_for_business("unknown-business") == default_voice

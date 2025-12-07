@@ -4,7 +4,12 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.db import SQLALCHEMY_AVAILABLE, SessionLocal
-from app.db_models import AppointmentDB, BusinessDB, ConversationDB, ConversationMessageDB
+from app.db_models import (
+    AppointmentDB,
+    BusinessDB,
+    ConversationDB,
+    ConversationMessageDB,
+)
 from app.main import app
 from app.metrics import BusinessTwilioMetrics, metrics
 
@@ -194,7 +199,12 @@ def test_admin_audit_filters_by_business_and_actor_and_time_window() -> None:
     # Filter by business_id and actor_type; events should be recent.
     audit_resp = client.get(
         "/v1/admin/audit",
-        params={"business_id": "audit-biz", "actor_type": "anonymous", "since_minutes": 10, "limit": 50},
+        params={
+            "business_id": "audit-biz",
+            "actor_type": "anonymous",
+            "since_minutes": 10,
+            "limit": 50,
+        },
     )
     assert audit_resp.status_code == 200
     events = audit_resp.json()

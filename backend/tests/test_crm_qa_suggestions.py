@@ -39,7 +39,9 @@ def test_build_heuristic_qa_suggestions_emergency_paths() -> None:
 
     # Emergency booked: should be treated as handled correctly.
     conv_booked = DummyConv("Booked emergency job", tags=["emergency"])
-    suggestion_booked = build(conv_booked, service_type="emergency_repair", has_appointments=True)
+    suggestion_booked = build(
+        conv_booked, service_type="emergency_repair", has_appointments=True
+    )
     assert suggestion_booked.likely_outcome == "booked"
     assert suggestion_booked.followup_needed is None
     assert suggestion_booked.emergency_handled_ok == "yes"
@@ -85,7 +87,9 @@ def test_get_conversation_includes_heuristic_qa_suggestions() -> None:
     # updating attributes here will be visible to get_conversation.
     conv.tags = ["emergency"]  # type: ignore[attr-defined]
     conv.outcome = "Booked emergency job"  # type: ignore[attr-defined]
-    conversations_repo.append_message(conv.id, role="user", text="My basement is flooded")
+    conversations_repo.append_message(
+        conv.id, role="user", text="My basement is flooded"
+    )
     conversations_repo.append_message(
         conv.id, role="assistant", text="We booked an emergency visit for you."
     )
@@ -111,7 +115,9 @@ def test_get_conversation_includes_heuristic_qa_suggestions() -> None:
     USE_DB_CONVERSATIONS,
     reason="Conversation QA test currently assumes in-memory conversations repository",
 )
-def test_maybe_llm_enrich_qa_suggestions_on_success(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_maybe_llm_enrich_qa_suggestions_on_success(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     # Configure speech provider to use OpenAI so the LLM enrichment path is exercised.
     class DummySpeechCfg:
         def __init__(self) -> None:

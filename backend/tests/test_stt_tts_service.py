@@ -21,7 +21,9 @@ async def test_transcribe_returns_empty_when_not_configured() -> None:
 
 
 @pytest.mark.anyio
-async def test_transcribe_handles_invalid_base64(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_transcribe_handles_invalid_base64(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     settings = SpeechSettings(provider="openai", openai_api_key="test-key")
     service = SpeechService(settings=settings)
 
@@ -30,7 +32,9 @@ async def test_transcribe_handles_invalid_base64(monkeypatch: pytest.MonkeyPatch
 
 
 @pytest.mark.anyio
-async def test_transcribe_returns_text_on_success(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_transcribe_returns_text_on_success(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     settings = SpeechSettings(provider="openai", openai_api_key="test-key")
     service = SpeechService(settings=settings)
 
@@ -72,7 +76,9 @@ async def test_synthesize_returns_placeholder_when_not_configured() -> None:
 
 
 @pytest.mark.anyio
-async def test_synthesize_returns_placeholder_on_error(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_synthesize_returns_placeholder_on_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     settings = SpeechSettings(provider="openai", openai_api_key="test-key")
     service = SpeechService(settings=settings)
 
@@ -140,4 +146,3 @@ async def test_provider_override_can_be_injected() -> None:
         provider=EchoProvider(),
     )
     assert await service.synthesize("hi") == "echo:hi"
-

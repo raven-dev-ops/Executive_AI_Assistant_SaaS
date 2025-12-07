@@ -70,14 +70,12 @@ def _build_business_context(business_id: str) -> str:
     upcoming = [
         a
         for a in appointments
-        if getattr(a, "start_time", None)
-        and a.start_time.date() >= today
+        if getattr(a, "start_time", None) and a.start_time.date() >= today
     ]
     next_week = [
         a
         for a in appointments
-        if getattr(a, "start_time", None)
-        and today <= a.start_time.date() <= in_7_days
+        if getattr(a, "start_time", None) and today <= a.start_time.date() <= in_7_days
     ]
     emergencies_week = sum(1 for a in next_week if getattr(a, "is_emergency", False))
     upcoming_sorted = sorted(
@@ -103,9 +101,7 @@ def _build_business_context(business_id: str) -> str:
     return "\n".join(context_lines)
 
 
-def _get_or_create_conversation(
-    conversation_id: Optional[str], business_id: str
-):
+def _get_or_create_conversation(conversation_id: Optional[str], business_id: str):
     if conversation_id:
         conv = conversations_repo.get(conversation_id)
         if conv and getattr(conv, "business_id", None) == business_id:
@@ -124,7 +120,9 @@ async def chat(
     context = _build_business_context(business_id)
     start = time.perf_counter()
     try:
-        answer = await owner_assistant_service.answer(question, business_context=context)
+        answer = await owner_assistant_service.answer(
+            question, business_context=context
+        )
     except Exception as exc:
         metrics.chat_failures += 1
         elapsed_ms = (time.perf_counter() - start) * 1000.0

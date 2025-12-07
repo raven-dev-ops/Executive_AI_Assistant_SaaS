@@ -42,9 +42,7 @@ def test_auth_start_rejects_unsupported_provider() -> None:
 def test_auth_callback_marks_integration_connected() -> None:
     business_id = _get_default_business_id()
 
-    resp = client.get(
-        f"/auth/linkedin/callback?state={business_id}&code=dummy-code"
-    )
+    resp = client.get(f"/auth/linkedin/callback?state={business_id}&code=dummy-code")
     assert resp.status_code == 200
     body = resp.json()
     assert body["provider"] == "linkedin"
@@ -63,15 +61,10 @@ def test_auth_callback_marks_integration_connected() -> None:
 
 
 def test_auth_callback_returns_404_for_missing_business() -> None:
-    resp = client.get(
-        "/auth/openai/callback?state=nonexistent-business&code=dummy"
-    )
+    resp = client.get("/auth/openai/callback?state=nonexistent-business&code=dummy")
     assert resp.status_code == 404
 
 
 def test_auth_callback_rejects_unsupported_provider() -> None:
-    resp = client.get(
-        "/auth/unknown/callback?state=default_business&code=dummy"
-    )
+    resp = client.get("/auth/unknown/callback?state=default_business&code=dummy")
     assert resp.status_code == 404
-

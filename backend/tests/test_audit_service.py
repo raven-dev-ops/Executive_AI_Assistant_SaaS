@@ -27,7 +27,9 @@ def _make_request(headers: Dict[str, str]) -> Request:
     return Request(scope)
 
 
-def test_derive_actor_assigns_roles_and_business_id(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_derive_actor_assigns_roles_and_business_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setattr(
         audit_module,
         "_resolve_business_id_from_headers",
@@ -49,7 +51,9 @@ def test_derive_actor_assigns_roles_and_business_id(monkeypatch: pytest.MonkeyPa
         assert actor.business_id == "biz-123"
 
 
-def test_resolve_business_id_uses_explicit_header_when_no_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_resolve_business_id_uses_explicit_header_when_no_api_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     # Even when SQLAlchemy is available, if there is no API key or widget token,
     # the resolver should return X-Business-ID directly without a DB lookup.
     monkeypatch.setattr(audit_module, "SQLALCHEMY_AVAILABLE", True)
@@ -65,7 +69,9 @@ def test_resolve_business_id_uses_explicit_header_when_no_api_key(monkeypatch: p
     assert resolved == "explicit-biz"
 
 
-def test_resolve_business_id_uses_db_for_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_resolve_business_id_uses_db_for_api_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setattr(audit_module, "SQLALCHEMY_AVAILABLE", True)
 
     class DummyBusiness:
@@ -102,7 +108,9 @@ def test_resolve_business_id_uses_db_for_api_key(monkeypatch: pytest.MonkeyPatch
     assert resolved == "biz-from-db"
 
 
-def test_record_audit_event_logs_when_db_unavailable(caplog, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_record_audit_event_logs_when_db_unavailable(
+    caplog, monkeypatch: pytest.MonkeyPatch
+) -> None:
     # Force the "DB unavailable" branch.
     monkeypatch.setattr(audit_module, "SQLALCHEMY_AVAILABLE", False)
     monkeypatch.setattr(audit_module, "SessionLocal", None)
@@ -123,7 +131,9 @@ def test_record_audit_event_logs_when_db_unavailable(caplog, monkeypatch: pytest
     assert rec.status_code == 204
 
 
-def test_record_audit_event_handles_db_errors_gracefully(caplog, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_record_audit_event_handles_db_errors_gracefully(
+    caplog, monkeypatch: pytest.MonkeyPatch
+) -> None:
     # Use a real session factory wrapped with a failing commit to hit the exception branch.
     assert audit_module.SessionLocal is not None
     real_factory = audit_module.SessionLocal
@@ -153,4 +163,3 @@ def test_record_audit_event_handles_db_errors_gracefully(caplog, monkeypatch: py
     assert any(
         "audit_event_persist_failed" in r.message for r in caplog.records
     ), "Expected a log entry when audit event persistence fails"
-

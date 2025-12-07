@@ -125,4 +125,3 @@ def test_owner_quotes_summarizes_quote_stages_and_conversions() -> None:
 
     assert quoted["count"] == 1
     assert quoted["quoted_value_total"] == pytest.approx(400.0)
-

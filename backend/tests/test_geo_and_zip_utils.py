@@ -8,12 +8,16 @@ def test_derive_neighborhood_label_prefers_zip_code() -> None:
 
 
 def test_derive_neighborhood_label_uses_trailing_segment_when_no_zip() -> None:
-    assert geo_utils.derive_neighborhood_label("456 Oak Ave, Springfield") == "Springfield"
+    assert (
+        geo_utils.derive_neighborhood_label("456 Oak Ave, Springfield") == "Springfield"
+    )
 
 
 def test_derive_neighborhood_label_falls_back_to_unspecified() -> None:
     assert geo_utils.derive_neighborhood_label("") == "unspecified"
-    assert geo_utils.derive_neighborhood_label("No commas or zips here") == "unspecified"
+    assert (
+        geo_utils.derive_neighborhood_label("No commas or zips here") == "unspecified"
+    )
 
 
 def test_geocode_address_returns_none_without_api_key(monkeypatch) -> None:

@@ -33,7 +33,9 @@ def test_event_counters_increment_on_core_flows(tmp_path):
     assert resp_chat.status_code == 200
 
     # 3) Contacts import
-    csv_content = "Name,Phone,Email,Address\nTest User,5551239999,test@example.com,123 St\n"
+    csv_content = (
+        "Name,Phone,Email,Address\nTest User,5551239999,test@example.com,123 St\n"
+    )
     csv_path = tmp_path / "import.csv"
     csv_path.write_text(csv_content, encoding="utf-8")
     with csv_path.open("rb") as f:
@@ -85,4 +87,7 @@ def test_event_counters_increment_on_core_flows(tmp_path):
     assert after["contacts_imported"] >= before.get("contacts_imported", 0) + 1
     assert after["qbo_sync_errors"] >= before.get("qbo_sync_errors", 0) + 1
     assert after["qbo_connections"] >= before.get("qbo_connections", 0) + 1
-    assert after["subscription_activations"] >= before.get("subscription_activations", 0) + 1
+    assert (
+        after["subscription_activations"]
+        >= before.get("subscription_activations", 0) + 1
+    )

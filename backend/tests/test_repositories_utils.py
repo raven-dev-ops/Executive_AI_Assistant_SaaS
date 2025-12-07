@@ -68,4 +68,3 @@ def test_inmemory_appointment_repository_update_fields() -> None:
     assert updated.quoted_value == 250.0
     assert updated.quote_status == "PROPOSED"
     assert updated.technician_id == "tech-1"
-

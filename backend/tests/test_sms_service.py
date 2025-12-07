@@ -89,7 +89,11 @@ def test_notify_owner_uses_business_owner_phone_override() -> None:
     try:
         sms_service._settings.owner_number = "+19999999999"  # type: ignore[attr-defined]
 
-        run(sms_service.notify_owner("Tenant-specific owner alert", business_id=business_id))
+        run(
+            sms_service.notify_owner(
+                "Tenant-specific owner alert", business_id=business_id
+            )
+        )
 
         sent = sms_service.sent_messages
         assert sent[-1].to == "+15550001234"
@@ -110,7 +114,11 @@ def test_notify_customer_sends_and_updates_metrics() -> None:
     metrics.sms_sent_total = 0
     metrics.sms_by_business.clear()
 
-    run(sms_service.notify_customer("+15550003333", "Customer message", business_id="biz-c"))
+    run(
+        sms_service.notify_customer(
+            "+15550003333", "Customer message", business_id="biz-c"
+        )
+    )
 
     sent = sms_service.sent_messages
     assert sent[-1].to == "+15550003333"
@@ -124,7 +132,9 @@ def test_notify_customer_sends_and_updates_metrics() -> None:
     assert per_tenant.sms_sent_customer == 1
 
 
-def test_send_sms_twilio_missing_credentials_does_not_call_api(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_send_sms_twilio_missing_credentials_does_not_call_api(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     sms_service._sent.clear()  # type: ignore[attr-defined]
     metrics.sms_sent_total = 0
     metrics.sms_by_business.clear()
@@ -136,7 +146,9 @@ def test_send_sms_twilio_missing_credentials_does_not_call_api(monkeypatch: pyte
 
     # If AsyncClient is instantiated, this will raise and fail the test.
     def _failing_async_client(*args, **kwargs):  # type: ignore[no-untyped-def]
-        raise AssertionError("Twilio AsyncClient should not be constructed when credentials are missing")
+        raise AssertionError(
+            "Twilio AsyncClient should not be constructed when credentials are missing"
+        )
 
     monkeypatch.setattr("app.services.sms.httpx.AsyncClient", _failing_async_client)
 
@@ -146,7 +158,11 @@ def test_send_sms_twilio_missing_credentials_does_not_call_api(monkeypatch: pyte
         sms_service._settings.twilio_auth_token = None  # type: ignore[attr-defined]
         sms_service._settings.from_number = None  # type: ignore[attr-defined]
 
-        run(sms_service.send_sms("+15550004444", "Twilio missing creds", business_id="biz-twilio"))
+        run(
+            sms_service.send_sms(
+                "+15550004444", "Twilio missing creds", business_id="biz-twilio"
+            )
+        )
 
         sent = sms_service.sent_messages
         assert sent[-1].to == "+15550004444"
@@ -195,7 +211,11 @@ def test_send_sms_twilio_failure_is_swallowed(monkeypatch: pytest.MonkeyPatch) -
         sms_service._settings.twilio_auth_token = "token"  # type: ignore[attr-defined]
         sms_service._settings.from_number = "+15550005555"  # type: ignore[attr-defined]
 
-        run(sms_service.send_sms("+15550006666", "Twilio failure path", business_id="biz-fail"))
+        run(
+            sms_service.send_sms(
+                "+15550006666", "Twilio failure path", business_id="biz-fail"
+            )
+        )
 
         # Even though Twilio call fails, local recording and metrics should be updated.
         sent = sms_service.sent_messages

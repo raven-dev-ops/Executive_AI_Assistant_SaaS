@@ -211,6 +211,7 @@ else:
         stripe_subscription_id: str | None
         subscription_status: str | None
         subscription_current_period_end: datetime | None
+
     class UserDB:  # pragma: no cover - placeholder when SQLAlchemy missing
         id: str
         email: str

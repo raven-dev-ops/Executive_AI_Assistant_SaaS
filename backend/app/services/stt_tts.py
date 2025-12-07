@@ -113,10 +113,7 @@ class SpeechService:
     def _select_provider(self) -> SpeechProvider:
         if self._provider_override is not None:
             return self._provider_override
-        if (
-            self._settings.provider == "openai"
-            and self._settings.openai_api_key
-        ):
+        if self._settings.provider == "openai" and self._settings.openai_api_key:
             return OpenAISpeechProvider(self._settings)
         return StubSpeechProvider()
 

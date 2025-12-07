@@ -137,7 +137,9 @@ async def test_calendar_delete_event_http_error_returns_false() -> None:
 
 
 @pytest.mark.anyio
-async def test_calendar_find_slots_respects_busy_ranges_and_travel_buffer(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_calendar_find_slots_respects_busy_ranges_and_travel_buffer(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     # Configure a dummy client whose freebusy().query().execute() returns a known busy window.
     class DummyFreeBusyQuery:
         def __init__(self, body) -> None:  # type: ignore[no-untyped-def]

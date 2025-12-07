@@ -68,3 +68,40 @@ def test_inmemory_appointment_repository_update_fields() -> None:
     assert updated.quoted_value == 250.0
     assert updated.quote_status == "PROPOSED"
     assert updated.technician_id == "tech-1"
+
+
+def test_inmemory_customer_repository_get_by_phone_scopes_business() -> None:
+    repo = repositories.InMemoryCustomerRepository()
+    # Same phone, different tenants.
+    cust_a = repo.upsert(name="A", phone="555", business_id="biz-1")
+    cust_b = repo.upsert(name="B", phone="555", business_id="biz-2")
+
+    assert repo.get_by_phone("555", business_id="biz-1") == cust_a
+    assert repo.get_by_phone("555", business_id="biz-2") == cust_b
+    # Fallback across tenants returns last inserted when no business specified.
+    assert repo.get_by_phone("555").id == cust_b.id
+
+    # Opt-out flag toggles only for matching business.
+    repo.set_sms_opt_out("555", business_id="biz-1", opt_out=True)
+    assert repo.get_by_phone("555", business_id="biz-1").sms_opt_out is True
+    assert repo.get_by_phone("555", business_id="biz-2").sms_opt_out is False
+
+
+def test_inmemory_conversation_repository_append_and_list() -> None:
+    repo = repositories.InMemoryConversationRepository()
+    conv1 = repo.create(channel="sms", business_id="biz-1")
+    conv2 = repo.create(channel="voice", business_id="biz-1")
+    conv_other = repo.create(channel="sms", business_id="biz-2")
+
+    repo.append_message(conv1.id, role="user", text="Hello")
+    repo.append_message(conv1.id, role="assistant", text="Hi!")
+    repo.append_message("missing", role="user", text="ignore")
+
+    listed = repo.list_for_business("biz-1")
+    assert {c.id for c in listed} == {conv1.id, conv2.id}
+    assert len(conv1.messages) == 2
+    assert conv1.messages[0].text == "Hello"
+    assert conv1.messages[1].role == "assistant"
+
+    # Ensure other tenant conversations are not mixed.
+    assert {c.id for c in repo.list_for_business("biz-2")} == {conv_other.id}

@@ -144,3 +144,10 @@ def test_init_db_creates_default_business_when_missing(monkeypatch: pytest.Monke
     # Default business should have been added and committed.
     assert dummy_session.added
     assert dummy_session.commits >= 1
+
+
+def test_init_db_skips_when_engine_none(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(db, "SQLALCHEMY_AVAILABLE", True)
+    monkeypatch.setattr(db, "engine", None)
+    # Should simply return without raising or doing work.
+    db.init_db()

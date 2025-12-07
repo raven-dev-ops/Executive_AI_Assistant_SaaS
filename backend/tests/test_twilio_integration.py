@@ -299,6 +299,15 @@ def test_twilio_voice_completed_call_short_circuits(monkeypatch):
     assert metrics.twilio_voice_requests == 1
 
 
+def test_twilio_voice_rejects_missing_required_fields():
+    resp = client.post(
+        "/twilio/voice",
+        data={"From": "+15550007777"},  # missing CallSid
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
+    assert resp.status_code == 422
+
+
 def test_twilio_missed_call_queue_upgrades_partial_intake_and_respects_statuses(
     monkeypatch,
 ):

@@ -1,4 +1,5 @@
 import asyncio
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -12,6 +13,7 @@ from app.services.conversation import (
     _infer_quote_for_service_type,
     _infer_service_type,
     _normalize_lead_source,
+    calendar_service,
 )
 from app.services.sessions import CallSession
 from app.repositories import customers_repo
@@ -286,3 +288,67 @@ def test_normalize_lead_source_labels_and_campaign() -> None:
     sms_normalized = _normalize_lead_source("sms", campaign="Summer Promo")
     assert sms_normalized.lower().startswith("sms")
     assert "summer promo" in sms_normalized.lower()
+
+
+def test_conversation_handles_unknown_stage_gracefully():
+    session = CallSession(id="unknown1", stage="UNKNOWN")
+    manager = ConversationManager()
+    result = run(manager.handle_input(session, "hi"))
+    # Unknown stages should leave state unchanged; ensure we don't crash and return text.
+    assert result.reply_text
+    assert result.new_state["stage"] == "UNKNOWN"
+
+
+def test_conversation_ask_schedule_decline_sets_pending_followup(monkeypatch):
+    session = CallSession(
+        id="sched-no",
+        stage="ASK_SCHEDULE",
+        business_id="biz-1",
+    )
+    session.problem_summary = "leak"
+    session.address = "123 Main"
+
+    async def fake_find_slots(*args, **kwargs):
+        return [TimeSlot(start=datetime.now(UTC), end=datetime.now(UTC) + timedelta(hours=1))]
+
+    monkeypatch.setattr(calendar_service, "find_slots", fake_find_slots)
+
+    manager = ConversationManager()
+    result = run(manager.handle_input(session, "no thanks"))
+    assert result.new_state["status"] == "PENDING_FOLLOWUP"
+    assert result.new_state["stage"] == "COMPLETED"
+
+
+def test_conversation_no_slots_available_fallback(monkeypatch):
+    session = CallSession(
+        id="no-slots",
+        stage="ASK_SCHEDULE",
+        business_id="biz-1",
+    )
+    session.problem_summary = "leak"
+    session.address = "123 Main"
+
+    async def fake_find_slots(*args, **kwargs):
+        return []
+
+    monkeypatch.setattr(calendar_service, "find_slots", fake_find_slots)
+
+    manager = ConversationManager()
+    result = run(manager.handle_input(session, "yes"))
+    assert result.new_state["status"] == "PENDING_FOLLOWUP"
+    assert result.new_state["stage"] == "COMPLETED"
+
+
+def test_conversation_confirm_slot_decline(monkeypatch):
+    now = datetime.now(UTC)
+    session = CallSession(
+        id="confirm-no",
+        stage="CONFIRM_SLOT",
+        business_id="biz-1",
+        requested_time=now.isoformat(),
+    )
+    session.problem_summary = "installation"
+    manager = ConversationManager()
+    result = run(manager.handle_input(session, "no, another time"))
+    assert result.new_state["status"] == "PENDING_FOLLOWUP"
+    assert result.new_state["stage"] == "COMPLETED"

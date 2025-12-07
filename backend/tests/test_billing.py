@@ -43,3 +43,20 @@ def test_webhook_updates_subscription(monkeypatch):
     status = client.get("/v1/owner/onboarding/profile").json()
     assert status.get("subscription_status") in {"active", "past_due", "canceled"}
     assert status.get("subscription_current_period_end") is not None
+
+
+def test_webhook_marks_payment_failed(monkeypatch):
+    now = datetime.now(UTC)
+    payload = {
+        "type": "invoice.payment_failed",
+        "data": {
+            "object": {
+                "customer": "cus_999",
+                "subscription": "sub_999",
+                "current_period_end": int((now + timedelta(days=10)).timestamp()),
+                "metadata": {"business_id": "default_business"},
+            }
+        },
+    }
+    resp = client.post("/v1/billing/webhook", json=payload)
+    assert resp.status_code == 200

@@ -308,6 +308,13 @@ def test_twilio_voice_rejects_missing_required_fields():
     assert resp.status_code == 422
 
 
+def test_get_business_name_falls_back_when_db_unavailable(monkeypatch):
+    monkeypatch.setattr(twilio_integration, "SQLALCHEMY_AVAILABLE", False)
+    monkeypatch.setattr(twilio_integration, "SessionLocal", None)
+    name = twilio_integration._get_business_name("any")  # type: ignore[attr-defined]
+    assert isinstance(name, str) and name
+
+
 def test_twilio_missed_call_queue_upgrades_partial_intake_and_respects_statuses(
     monkeypatch,
 ):

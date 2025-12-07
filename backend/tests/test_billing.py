@@ -1,8 +1,12 @@
 from datetime import UTC, datetime, timedelta
 
+import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from app.main import app
+from app.metrics import metrics
+from app.routers import billing
 
 client = TestClient(app)
 
@@ -60,3 +64,53 @@ def test_webhook_marks_payment_failed(monkeypatch):
     }
     resp = client.post("/v1/billing/webhook", json=payload)
     assert resp.status_code == 200
+
+
+def test_create_checkout_session_invalid_plan_returns_404():
+    resp = client.post(
+        "/v1/billing/create-checkout-session", params={"plan_id": "nonexistent"}
+    )
+    assert resp.status_code == 404
+
+
+def test_webhook_invalid_payload_increments_failure(monkeypatch):
+    metrics.billing_webhook_failures = 0
+    resp = client.post(
+        "/v1/billing/webhook",
+        data="not-json",
+        headers={"Content-Type": "application/json"},
+    )
+    assert resp.status_code == 400
+    assert metrics.billing_webhook_failures >= 1
+
+
+def test_require_db_raises_when_unavailable(monkeypatch):
+    monkeypatch.setattr(billing, "SQLALCHEMY_AVAILABLE", False)
+    monkeypatch.setattr(billing, "SessionLocal", None)
+    with pytest.raises(HTTPException) as exc:
+        billing._require_db()
+    assert exc.value.status_code == 503
+
+
+def test_update_subscription_missing_business(monkeypatch):
+    class DummySession:
+        def __init__(self) -> None:
+            self.closed = False
+
+        def get(self, model, key):
+            return None
+
+        def close(self):
+            self.closed = True
+
+    monkeypatch.setattr(billing, "SQLALCHEMY_AVAILABLE", True)
+    monkeypatch.setattr(billing, "SessionLocal", lambda: DummySession())
+    with pytest.raises(HTTPException) as exc:
+        billing._update_subscription(
+            business_id="missing",
+            status="active",
+            customer_id=None,
+            subscription_id=None,
+            current_period_end=None,
+        )
+    assert exc.value.status_code == 404

@@ -110,3 +110,54 @@ def test_fetch_zip_income_handles_parse_errors(monkeypatch) -> None:
 def test_haversine_km_basic() -> None:
     km = geo_utils.haversine_km((39.0997, -94.5786), (38.6270, -90.1994))  # KC to STL
     assert 350 <= km <= 420
+
+
+def test_geocode_address_success_and_cache(monkeypatch):
+    calls = {"count": 0}
+    geo_utils._GEOCODE_CACHE.clear()  # type: ignore[attr-defined]
+
+    class DummyResponse:
+        def __init__(self, status="OK"):
+            self._status = status
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {
+                "status": self._status,
+                "results": [
+                    {"geometry": {"location": {"lat": 1.23, "lng": 4.56}}}
+                ],
+            }
+
+    def fake_get(url, params=None, timeout=5.0):
+        calls["count"] += 1
+        return DummyResponse()
+
+    monkeypatch.setenv("GOOGLE_MAPS_API_KEY", "demo-key")
+    monkeypatch.setattr(geo_utils, "httpx", type("H", (), {"get": fake_get}))
+
+    coords = geo_utils.geocode_address("123 Main St")
+    assert coords == (1.23, 4.56)
+    # Second call should use cache, not increment calls.
+    coords2 = geo_utils.geocode_address("123 Main St")
+    assert coords2 == (1.23, 4.56)
+    assert calls["count"] == 1
+
+
+def test_geocode_address_handles_non_ok(monkeypatch):
+    class DummyResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"status": "ZERO_RESULTS", "results": []}
+
+    def fake_get(url, params=None, timeout=5.0):
+        return DummyResponse()
+
+    monkeypatch.setenv("GOOGLE_MAPS_API_KEY", "demo-key")
+    monkeypatch.setattr(geo_utils, "httpx", type("H", (), {"get": fake_get}))
+
+    assert geo_utils.geocode_address("missing") is None

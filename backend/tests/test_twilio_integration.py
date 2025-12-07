@@ -279,6 +279,25 @@ def test_twilio_voice_unhandled_error_increments_metrics(monkeypatch):
     assert metrics.twilio_voice_errors == 1
 
 
+def test_twilio_voice_completed_call_short_circuits(monkeypatch):
+    metrics.twilio_voice_requests = 0
+    metrics.twilio_by_business.clear()
+
+    resp = client.post(
+        "/twilio/voice",
+        data={
+            "CallSid": "CA_DONE",
+            "From": "+15550007777",
+            "CallStatus": "completed",
+        },
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
+    assert resp.status_code == 200
+    body = resp.text
+    assert body.startswith("<Response")
+    assert metrics.twilio_voice_requests == 1
+
+
 def test_twilio_missed_call_queue_upgrades_partial_intake_and_respects_statuses(
     monkeypatch,
 ):

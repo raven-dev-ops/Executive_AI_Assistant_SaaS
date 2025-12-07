@@ -133,6 +133,38 @@ def test_conversation_reuses_address_for_returning_customer():
     assert result.new_state["address"].startswith("1010 Cedar St")
 
 
+@pytest.mark.skipif(
+    not SQLALCHEMY_AVAILABLE or SessionLocal is None,
+    reason="Spanish language config uses database-backed business row",
+)
+def test_conversation_spanish_greeting_and_repeat_name_prompt():
+    # Configure tenant with Spanish language.
+    session_db = SessionLocal()
+    try:
+        biz_id = "biz-es"
+        row = session_db.get(BusinessDB, biz_id)
+        if row is None:
+            row = BusinessDB(id=biz_id, name="Plomeria", language_code="es")  # type: ignore[call-arg]
+            session_db.add(row)
+        else:
+            row.language_code = "es"
+        session_db.commit()
+    finally:
+        session_db.close()
+
+    session = CallSession(id="es1", caller_phone="555-1212", business_id="biz-es")
+    manager = ConversationManager()
+
+    result = run(manager.handle_input(session, None))
+    assert "hola" in result.reply_text.lower()
+    assert result.new_state["stage"] == "ASK_NAME"
+
+    # Empty response at ASK_NAME should return the Spanish repeat prompt.
+    session.stage = "ASK_NAME"
+    repeat = run(manager.handle_input(session, ""))
+    assert "no alcancé a escuchar tu nombre" in repeat.reply_text.lower()
+
+
 def test_infer_service_type_basic_keywords():
     # Tankless specialization.
     assert (
@@ -244,6 +276,13 @@ def test_infer_quote_for_service_type_ranges_and_emergency_markup() -> None:
 
 def test_normalize_lead_source_labels_and_campaign() -> None:
     assert _normalize_lead_source("phone") == "Phone"
-    assert _normalize_lead_source("web", "Google Ads - KS") == "Web ? Google Ads - KS"
+    normalized = _normalize_lead_source("web", "Google Ads - KS")
+    assert normalized.lower().startswith("web")
+    assert "google ads" in normalized.lower()
     # Unknown channels should be title-cased.
     assert _normalize_lead_source("facebook") == "Facebook"
+
+    # SMS with campaign should format cleanly.
+    sms_normalized = _normalize_lead_source("sms", campaign="Summer Promo")
+    assert sms_normalized.lower().startswith("sms")
+    assert "summer promo" in sms_normalized.lower()

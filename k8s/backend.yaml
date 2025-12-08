@@ -30,21 +30,9 @@ stringData:
   SMS_FROM_NUMBER: "+1XXXXXXXXXX"
   SMS_OWNER_NUMBER: "+1XXXXXXXXXX"
   OPENAI_API_KEY: "REPLACE_WITH_OPENAI_API_KEY_OR_REMOVE"
-  # Paste the Google service account JSON used for Calendar access here.
-  # In production, prefer creating this secret via kubectl or your CI/CD system.
-  google-calendar.json: |
-    {
-      "type": "service_account",
-      "project_id": "REPLACE_ME",
-      "private_key_id": "REPLACE_ME",
-      "private_key": "REPLACE_WITH_PRIVATE_KEY",
-      "client_email": "REPLACE_ME@REPLACE_ME.iam.gserviceaccount.com",
-      "client_id": "REPLACE_ME",
-      "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-      "token_uri": "https://oauth2.googleapis.com/token",
-      "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-      "client_x509_cert_url": "REPLACE_ME"
-    }
+  # Mount a separately created secret named google-calendar.json containing your service account JSON.
+  # Example (replace with real file path/contents before applying):
+  #   kubectl create secret generic ai-telephony-backend-secrets --from-file=google-calendar.json=/path/to/sa.json
 
 ---
 apiVersion: apps/v1

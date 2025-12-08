@@ -57,8 +57,25 @@ Secret Management & Safety
 --------------------------
 
 - Secrets are expected in environment variables; non-stub providers (Twilio, Stripe, OpenAI) require their keys to be set. Misconfigurations are logged as warnings at startup.
+- Stripe webhooks: when `STRIPE_USE_STUB=false`, configure `STRIPE_WEBHOOK_SECRET` (and optional `STRIPE_VERIFY_SIGNATURES` + `STRIPE_REPLAY_PROTECTION_SECONDS`, default 300s); `/v1/billing/webhook` verifies the `Stripe-Signature` header and rejects duplicate event IDs in that window.
+- Data retention: automated purge runs every `RETENTION_PURGE_INTERVAL_HOURS` (default 24; set to 0 to disable) and can be invoked manually via `/v1/admin/retention/prune`; audit history is available at `/v1/admin/retention/history`.
+- Dashboard/CRM RBAC: owner token or user roles (`admin`, `staff`, `viewer`) via `X-User-ID` + `BusinessUser` membership gate dashboard and CRM routes; writes require `admin/owner/staff`, reads allow `viewer`.
+- Chat observability: `/metrics/prometheus` exposes chat latency histogram + p50/p95/p99; conversation IDs are returned via `X-Conversation-ID` headers on `/v1/chat` and `/v1/chat/stream`.
+- Background jobs: in-process job queue for CSV imports (contacts) and optional reminder dispatch; job counters exported via `ai_telephony_job_queue_*` in `/metrics/prometheus`.
+- Accessibility: dashboard includes semantic labels/ARIA for nav and dialogs; ensure focus-visible styling remains and contrast meets WCAG AA.
 - A sanitized config summary is logged on boot; secret values are never logged.
 - Gitleaks runs in CI to prevent committing secrets; rotate keys promptly if exposure is suspected.
+- Rate limiting (auth/chat/webhooks/voice) is on by default:
+  - `RATE_LIMIT_PER_MINUTE` (default 120), `RATE_LIMIT_BURST` (default 20)
+  - `RATE_LIMIT_WHITELIST_IPS` for trusted sources (comma-separated).
+  - Exempt paths: `/healthz`, `/readyz`, `/metrics`, `/metrics/prometheus`.
+- Security headers/CSP:
+  - Enabled by default; override with `SECURITY_HEADERS_ENABLED=false` or custom `SECURITY_CSP`.
+  - HSTS enabled by default (`SECURITY_HSTS_ENABLED`, `SECURITY_HSTS_MAX_AGE`).
+- OAuth integrations (LinkedIn, Gmail/Google):
+  - Configure `LINKEDIN_CLIENT_ID/SECRET`, `GOOGLE_CLIENT_ID/SECRET`, `OAUTH_REDIRECT_BASE`, `AUTH_STATE_SECRET`.
+  - Start URLs: `/auth/{provider}/start?business_id=...` return real provider authorize URLs with signed state.
+  - Callbacks: `/auth/{provider}/callback?state=...&code=...` simulate token exchange; refresh/revoke endpoints provided.
 
 
 Source PDFs & Traceability
@@ -238,8 +255,16 @@ Key endpoints used:
 - `/v1/admin/twilio/health` - Twilio/webhook configuration and metrics, including per-tenant
   voice/SMS request and error counts.
 - `PATCH /v1/admin/businesses/{business_id}` - update status and notification fields.
-+- `POST /v1/admin/businesses/{business_id}/rotate-key` - rotate per-tenant API keys.
-+- `POST /v1/admin/businesses/{business_id}/rotate-widget-token` - rotate per-tenant widget tokens.
+- `POST /v1/admin/businesses/{business_id}/rotate-key` - rotate per-tenant API keys.
+- `POST /v1/admin/businesses/{business_id}/rotate-widget-token` - rotate per-tenant widget tokens.
+
+Operations & Incidents
+----------------------
+
+- Prometheus rules live in `k8s/prometheus-rules.yaml`; critical alerts are labeled `page: "true"`.
+- Alertmanager wiring examples (Slack + email) in `k8s/alertmanager-config.example.yaml`.
+- Scenario runbooks: `INCIDENT_RESPONSE.md` plus post-incident checklist/template in
+  `POST_INCIDENT_TEMPLATE.md`.
 
 
 Twilio, SMS & Multi-Tenant Notes

@@ -200,6 +200,21 @@ Operational tips:
   - Use logs and `/metrics` to confirm that traffic for each tenant is being handled and counted
     separately.
 
+6. Demo/Staging Seed Data
+-------------------------
+
+- Script: `backend/seed_demo_data.py` seeds customers, appointments, and conversations for a tenant.
+- Modes:
+  - In-memory repos (default dev): `python seed_demo_data.py --reset`
+  - DB-backed: set `USE_DB_CUSTOMERS=true` etc. and `DATABASE_URL=...`; optional `--if-empty` skips when data already exists.
+- Options:
+  - `--business-id demo_plumbing` (default) to target a tenant; script creates the Business row if missing.
+  - `--anonymize` to replace names/phones with generic values.
+  - `--dry-run` to print counts without writing, useful for CI.
+  - `--reset` clears existing data for that tenant (both DB and in-memory repos).
+- Quick checks:
+  - `cd backend && python seed_demo_data.py --dry-run`
+  - `cd backend && python seed_demo_data.py --reset --anonymize --business-id demo_plumbing`
 
 6. Local Dev Profiles (Operator Notes)
 --------------------------------------
@@ -235,6 +250,7 @@ For a production deployment, integrate these signals with your monitoring stack:
   - Request volume and error rate over time.
   - Appointments scheduled per day.
   - SMS volume (owner vs. customer).
+  - Chat latency/availability, webhook error rates, background job failures.
 
 Example Prometheus scrape config (replace host/port as needed):
 
@@ -256,6 +272,8 @@ Because `/metrics` returns JSON counters rather than native Prometheus expositio
   - `twilio_voice_requests`, `twilio_voice_errors`
   - `twilio_sms_requests`, `twilio_sms_errors`
   - `voice_session_requests`, `voice_session_errors`
+  - `chat_messages`, `chat_failures`, `chat_latency_ms_total`, `chat_latency_ms_samples`
+  - `background_job_errors`, `billing_webhook_failures`
   - Per-tenant breakdowns in `sms_by_business`, `twilio_by_business`, and `voice_sessions_by_business`
 
 Useful dashboard views:
@@ -267,56 +285,63 @@ Useful dashboard views:
   `twilio_by_business[business_id].voice_errors` / `.sms_errors` alongside request volume.
 - Voice session health: plot `voice_session_errors` and per-tenant
   `voice_sessions_by_business[business_id].errors` to catch issues in `/v1/voice/session/*` flows.
+- Chat health: plot chat error rate and average latency (`chat_latency_ms_total / chat_latency_ms_samples`).
+- Background jobs: alert if `background_job_errors` increases; watch billing webhook failures.
 
-Configure alerts for:
+Alerts (see `k8s/prometheus-rules.yaml`):
 
-- High error rate (e.g., `total_errors` increasing faster than normal).
-- Drop in `appointments_scheduled` compared to historical baselines.
-- Sudden spike or drop in SMS volume (could indicate integration issues).
-- Twilio/webhook issues, for example:
-  - Voice: alert when the ratio `twilio_voice_errors / max(twilio_voice_requests, 1)` exceeds a
-    small threshold for several minutes.
-  - SMS: similarly for `twilio_sms_errors / max(twilio_sms_requests, 1)`.
-- Voice session issues, for example:
-  - Alert when `voice_session_errors / max(voice_session_requests, 1)` exceeds a threshold, or when
-    per-tenant `voice_sessions_by_business[business_id].errors` spikes.
+- HighTwilioVoiceErrorRate / HighTwilioSmsErrorRate (>5% for 5m)
+- HighVoiceSessionErrorRate (>5% for 5m)
+- HighChatErrorRate (>5% over 5m)
+- ElevatedChatLatency (avg >1.5s over 10m)
+- WebhookErrorRate (>5% on `/twilio/*` or `/telephony/*` over 5m)
+- BackgroundJobFailures (any errors in last 10m)
+- BillingWebhookFailures (any errors in last 10m)
 
-Example Prometheus-style alerts (schematic):
+When running in a Kubernetes cluster with the Prometheus Operator or kube-prometheus stack, you
+can use `k8s/prometheus-rules.yaml` in this repo as a starting point. Adjust labels/selectors to
+match your Prometheus installation.
 
-```yaml
-groups:
-  - name: ai-telephony-alerts
-    rules:
-      - alert: HighTwilioVoiceErrorRate
-        expr: (twilio_voice_errors / clamp_max(twilio_voice_requests, 1)) > 0.05
-        for: 5m
-        labels:
-          severity: warning
-        annotations:
-          summary: "High Twilio voice error rate"
-          description: "Voice webhook errors >5% for 5m."
+Alert response playbook:
 
-      - alert: HighVoiceSessionErrorRate
-        expr: (voice_session_errors / clamp_max(voice_session_requests, 1)) > 0.05
-        for: 5m
-        labels:
-          severity: warning
-         annotations:
-           summary: "High voice session error rate"
-           description: "Voice session API errors >5% for 5m."
-```
+1) Identify which alert fired and check the corresponding metric in Prometheus/Grafana.
+2) Pull recent logs for the affected path (e.g., `/twilio/*`, `/v1/chat`, background job worker).
+3) If Twilio/Stripe webhooks: verify credentials, signature verification toggles, and upstream status pages.
+4) If chat latency/errors: check upstream LLM/service providers and recent deployments; consider rolling back.
+5) If background jobs: inspect job runner logs and retry queue; pause noisy tenants if needed.
 
-- When running in a Kubernetes cluster with the Prometheus Operator or kube-prometheus stack, you
-  can use `k8s/prometheus-rules.yaml` in this repo as a starting point for alerts wired directly to
-  the exported Prometheus metrics (`ai_telephony_twilio_voice_*` and
-  `ai_telephony_voice_session_*`). Adjust labels/selectors to match your Prometheus installation.
+**Log aggregation**:
+- Backend logs are emitted to stdout by default via `logging_config.configure_logging`.
+- Ship logs to a central store (e.g., Cloud Logging, ELK, or similar) and index by:
+  - Service name.
+  - Request path and status.
+  - Error stack traces for investigation.
 
-- **Log aggregation**:
-  - Backend logs are emitted to stdout by default via `logging_config.configure_logging`.
-  - Ship logs to a central store (e.g., Cloud Logging, ELK, or similar) and index by:
-    - Service name.
-    - Request path and status.
-    - Error stack traces for investigation.
+
+6. Database migrations
+----------------------
+
+- Tooling: Alembic (configured in `backend/alembic.ini`; metadata from `app.db` / `app.db_models`).
+- Generate a new revision (with models imported):
+
+  ```bash
+  cd backend
+  export DATABASE_URL=postgresql://user:pass@host:5432/dbname  # or your env
+  alembic revision --autogenerate -m "describe change"
+  ```
+
+- Apply migrations:
+
+  ```bash
+  alembic upgrade head
+  ```
+
+- Rollback plan:
+  1. Take a DB backup/snapshot before applying (`pg_dump` or managed snapshot).
+  2. To revert the last change quickly: `alembic downgrade -1`.
+  3. If downgrade is unsafe, restore from the backup snapshot.
+
+- CI: backend workflow runs `alembic upgrade head` against SQLite to ensure revisions are valid.
 
 
 7. Performance & Load Testing
@@ -325,7 +350,9 @@ groups:
 For early-stage and staging environments, you can use the provided load-test script in `backend/`
 to exercise the voice and telephony APIs:
 
-- Script: `backend/load_test_voice.py`
+- Scripts:
+  - `backend/load_test_voice.py` (voice/telephony)
+  - `backend/load_test_chat.py` (owner chat/assistant)
 - Requirements:
   - Backend running (for example, `uvicorn app.main:app --reload --env-file ..\env.dev.db`).
   - Python venv for `backend` with `pip install -e .[dev]`.
@@ -350,6 +377,15 @@ Examples (from repo root, backend on `http://localhost:8000`):
     --api-key YOUR_API_KEY --business-id YOUR_BUSINESS_ID
   ```
 
+- **Owner chat API (`/v1/chat`)**
+
+  ```bash
+  cd backend
+  python load_test_chat.py --requests 50 --concurrency 10 \
+    --backend http://localhost:8000 \
+    --owner-token YOUR_OWNER_TOKEN --business-id YOUR_BUSINESS_ID
+  ```
+
 The script prints:
 
 - Total sessions, completed sessions, errors, and wall-clock time.
@@ -360,6 +396,13 @@ Correlate these runs with `/metrics`:
 - `voice_session_requests` / `voice_session_errors` and `voice_sessions_by_business`.
 - `twilio_voice_requests` / `twilio_voice_errors` (for telephony-style flows).
 - `route_metrics["/v1/voice/session/input"].max_latency_ms` and similar per-path metrics.
+- Chat and conversation profiling: `ai_telephony_chat_latency_p95_ms` / `_p99_ms`,
+  `ai_telephony_conversation_latency_p95_ms` / `_p99_ms`, plus bucketed histograms.
+
+Targets (staging, per request):
+
+- Chat (`/v1/chat`): p95 ≤ 1200ms, p99 ≤ 1500ms.
+- Voice/telephony conversation turns: p95 ≤ 2500ms, p99 ≤ 3500ms.
 
 Use these observations to refine timeouts, retry policies, and capacity assumptions before
 onboarding higher-volume tenants.
@@ -386,12 +429,8 @@ When something goes wrong:
    - For external outages, monitor provider status and retry once service is restored.
 
 4. **Postmortem**
-   - Capture a short, blameless write-up:
-     - What happened (symptoms and timeline).
-     - User impact (missed calls, notifications, or schedules).
-     - Root cause (internal bug vs. external dependency).
-     - What went well and what could improve.
-     - Concrete follow-up actions (tests, alerts, documentation).
+   - Use `POST_INCIDENT_TEMPLATE.md` for a blameless review within 48 hours of resolution.
+   - Update playbooks in `INCIDENT_RESPONSE.md` if gaps are found; add follow-up tasks with owners/dates.
 
 
 9. Debugging & Troubleshooting

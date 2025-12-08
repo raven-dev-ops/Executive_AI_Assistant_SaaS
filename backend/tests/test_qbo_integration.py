@@ -56,3 +56,35 @@ def test_qbo_authorize_and_sync(monkeypatch):
     assert sync_data["imported"] >= 1
     customers = customers_repo.list_for_business("default_business")
     assert len(customers) >= 1
+
+
+def test_qbo_sync_refreshes_expired_token(monkeypatch):
+    from app.routers import qbo_integration
+
+    # Use dummy settings to avoid real credentials.
+    monkeypatch.setattr(qbo_integration, "get_settings", lambda: DummySettings())
+
+    # Connect once to seed tokens.
+    cb_resp = client.get(
+        "/v1/integrations/qbo/callback",
+        params={"code": "abc123", "realmId": "realm-1", "state": "default_business"},
+    )
+    assert cb_resp.status_code == 200
+
+    # Expire token manually.
+    if qbo_integration.SQLALCHEMY_AVAILABLE and qbo_integration.SessionLocal:
+        session = qbo_integration.SessionLocal()
+        try:
+            row = session.get(qbo_integration.BusinessDB, "default_business")
+            if row:
+                row.qbo_token_expires_at = qbo_integration.datetime.now(
+                    qbo_integration.UTC
+                ) - qbo_integration.timedelta(minutes=1)
+                session.add(row)
+                session.commit()
+        finally:
+            session.close()
+
+    sync_resp = client.post("/v1/integrations/qbo/sync")
+    assert sync_resp.status_code == 200
+    assert "Stubbed sync" in sync_resp.json()["note"]

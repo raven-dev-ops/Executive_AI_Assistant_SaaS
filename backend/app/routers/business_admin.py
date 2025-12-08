@@ -5,6 +5,7 @@ import io
 import os
 import secrets
 from datetime import datetime, UTC, timedelta
+import json
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel, Field
@@ -17,12 +18,14 @@ from ..db_models import (
     BusinessDB,
     ConversationDB,
     ConversationMessageDB,
+    RetentionPurgeLogDB,
     TechnicianDB,
 )
 from ..deps import require_admin_auth
 from ..metrics import metrics
 from ..repositories import appointments_repo, conversations_repo, customers_repo
 from ..services.gcp_storage import get_gcs_health
+from ..services.retention_purge import PurgeResult, run_retention_purge
 
 
 router = APIRouter(dependencies=[Depends(require_admin_auth)])
@@ -114,6 +117,12 @@ class BusinessUsageResponse(BusinessResponse):
     service_type_counts: dict[str, int] = Field(default_factory=dict)
     emergency_service_type_counts: dict[str, int] = Field(default_factory=dict)
     pending_reschedules: int = 0
+    twilio_voice_requests: int | None = None
+    twilio_voice_errors: int | None = None
+    twilio_sms_requests: int | None = None
+    twilio_sms_errors: int | None = None
+    twilio_error_rate: float | None = None
+    last_activity_at: datetime | None = None
 
 
 class TwilioConfigStatus(BaseModel):
@@ -156,6 +165,17 @@ class AdminEnvironmentResponse(BaseModel):
 
 
 class RetentionPruneResponse(BaseModel):
+    appointments_deleted: int
+    conversations_deleted: int
+    conversation_messages_deleted: int
+    log_id: int | None = None
+
+
+class RetentionPurgeLogResponse(BaseModel):
+    id: int
+    created_at: datetime
+    actor_type: str
+    trigger: str
     appointments_deleted: int
     conversations_deleted: int
     conversation_messages_deleted: int
@@ -592,6 +612,17 @@ def _build_business_usage(business_id: str, row: BusinessDB) -> BusinessUsageRes
     sms_owner_messages = sms_stats.sms_sent_owner if sms_stats else 0
     sms_customer_messages = sms_stats.sms_sent_customer if sms_stats else 0
     sms_total_messages = sms_stats.sms_sent_total if sms_stats else 0
+    twilio_stats = metrics.twilio_by_business.get(business_id)
+    twilio_voice_requests = twilio_stats.voice_requests if twilio_stats else 0
+    twilio_voice_errors = twilio_stats.voice_errors if twilio_stats else 0
+    twilio_sms_requests = twilio_stats.sms_requests if twilio_stats else 0
+    twilio_sms_errors = twilio_stats.sms_errors if twilio_stats else 0
+    twilio_total_requests = twilio_voice_requests + twilio_sms_requests
+    twilio_error_rate = (
+        (twilio_voice_errors + twilio_sms_errors) / twilio_total_requests
+        if twilio_total_requests > 0
+        else 0.0
+    )
 
     now = datetime.now(UTC)
     window_7 = now - timedelta(days=7)
@@ -605,10 +636,13 @@ def _build_business_usage(business_id: str, row: BusinessDB) -> BusinessUsageRes
     emergency_service_type_counts: dict[str, int] = {}
     pending_reschedules = 0
 
+    last_activity_at: datetime | None = None
     for appt in appointments:
         start_time = getattr(appt, "start_time", None)
         if not start_time:
             continue
+        if last_activity_at is None or start_time > last_activity_at:
+            last_activity_at = start_time
         status = getattr(appt, "status", "SCHEDULED").upper()
         if status == "PENDING_RESCHEDULE":
             pending_reschedules += 1
@@ -628,10 +662,18 @@ def _build_business_usage(business_id: str, row: BusinessDB) -> BusinessUsageRes
                 emergencies_last_30_days += 1
 
     created_at = getattr(row, "created_at", datetime.now(UTC)).replace(tzinfo=UTC)
+    # Consider conversation activity too.
+    for conv in conversations:
+        created = getattr(conv, "created_at", None)
+        if created is not None and (last_activity_at is None or created > last_activity_at):
+            last_activity_at = created
 
     return BusinessUsageResponse(
         id=row.id,
         name=row.name,
+        owner_name=getattr(row, "owner_name", None),
+        owner_email=getattr(row, "owner_email", None),
+        vertical=getattr(row, "vertical", None),
         api_key=row.api_key,
         calendar_id=getattr(row, "calendar_id", None),
         status=getattr(row, "status", "ACTIVE"),
@@ -657,6 +699,12 @@ def _build_business_usage(business_id: str, row: BusinessDB) -> BusinessUsageRes
         service_type_counts=service_type_counts,
         emergency_service_type_counts=emergency_service_type_counts,
         pending_reschedules=pending_reschedules,
+        twilio_voice_requests=twilio_voice_requests,
+        twilio_voice_errors=twilio_voice_errors,
+        twilio_sms_requests=twilio_sms_requests,
+        twilio_sms_errors=twilio_sms_errors,
+        twilio_error_rate=twilio_error_rate,
+        last_activity_at=last_activity_at or created_at,
     )
 
 
@@ -685,6 +733,25 @@ def list_business_usage() -> list[BusinessUsageResponse]:
         return [_build_business_usage(b.id, b) for b in rows]
     finally:
         session.close()
+
+
+@router.get("/businesses/usage.json", response_class=Response)
+def download_business_usage_json() -> Response:
+    """Download per-tenant usage stats as JSON for billing/analysis."""
+    session = _get_db_session()
+    try:
+        rows = session.query(BusinessDB).all()
+        usages = [_build_business_usage(b.id, b) for b in rows]
+    finally:
+        session.close()
+
+    payload = [u.model_dump() for u in usages]
+    json_bytes = json.dumps(payload, default=str, indent=2).encode("utf-8")
+    return Response(
+        content=json_bytes,
+        media_type="application/json",
+        headers={"Content-Disposition": 'attachment; filename="business_usage.json"'},
+    )
 
 
 @router.get(
@@ -843,62 +910,53 @@ def prune_retention() -> RetentionPruneResponse:
     """Prune old appointments and conversations based on per-tenant retention.
 
     This endpoint is intended to be called by an operator or scheduled job
-    in environments where database support is available.
+    in environments where database support is available. A purge log entry
+    is written for auditability.
     """
+    try:
+        result: PurgeResult = run_retention_purge(
+            actor_type="admin", trigger="manual"
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc))
+    return RetentionPruneResponse(
+        appointments_deleted=result.appointments_deleted,
+        conversations_deleted=result.conversations_deleted,
+        conversation_messages_deleted=result.conversation_messages_deleted,
+        log_id=result.log_id,
+    )
+
+
+@router.get("/retention/history", response_model=list[RetentionPurgeLogResponse])
+def retention_history(limit: int = 50) -> list[RetentionPurgeLogResponse]:
+    """Return recent retention purge runs for audit purposes."""
     session = _get_db_session()
     try:
-        now = datetime.now(UTC)
-        appointments_deleted = 0
-        conversations_deleted = 0
-        messages_deleted = 0
-
-        businesses = session.query(BusinessDB).all()
-        for row in businesses:
-            appt_ret = getattr(row, "appointment_retention_days", None)
-            if appt_ret is not None and appt_ret > 0:
-                cutoff = now - timedelta(days=appt_ret)
-                result = (
-                    session.query(AppointmentDB)
-                    .filter(
-                        AppointmentDB.business_id == row.id,
-                        AppointmentDB.start_time < cutoff,
-                    )
-                    .delete(synchronize_session=False)
-                )
-                appointments_deleted += int(result or 0)
-
-            conv_ret = getattr(row, "conversation_retention_days", None)
-            if conv_ret is not None and conv_ret > 0:
-                cutoff = now - timedelta(days=conv_ret)
-                old_convs = (
-                    session.query(ConversationDB)
-                    .filter(
-                        ConversationDB.business_id == row.id,
-                        ConversationDB.created_at < cutoff,
-                    )
-                    .all()
-                )
-                conv_ids = [c.id for c in old_convs]
-                if conv_ids:
-                    msg_result = (
-                        session.query(ConversationMessageDB)
-                        .filter(ConversationMessageDB.conversation_id.in_(conv_ids))
-                        .delete(synchronize_session=False)
-                    )
-                    conv_result = (
-                        session.query(ConversationDB)
-                        .filter(ConversationDB.id.in_(conv_ids))
-                        .delete(synchronize_session=False)
-                    )
-                    messages_deleted += int(msg_result or 0)
-                    conversations_deleted += int(conv_result or 0)
-
-        session.commit()
-        return RetentionPruneResponse(
-            appointments_deleted=appointments_deleted,
-            conversations_deleted=conversations_deleted,
-            conversation_messages_deleted=messages_deleted,
+        rows = (
+            session.query(RetentionPurgeLogDB)
+            .order_by(RetentionPurgeLogDB.created_at.desc())
+            .limit(limit)
+            .all()
         )
+        history: list[RetentionPurgeLogResponse] = []
+        for row in rows:
+            created_at = getattr(row, "created_at", datetime.now(UTC))
+            if created_at.tzinfo is None:
+                created_at = created_at.replace(tzinfo=UTC)
+            history.append(
+                RetentionPurgeLogResponse(
+                    id=row.id,
+                    created_at=created_at,
+                    actor_type=getattr(row, "actor_type", "unknown"),
+                    trigger=getattr(row, "trigger", "unknown"),
+                    appointments_deleted=getattr(row, "appointments_deleted", 0),
+                    conversations_deleted=getattr(row, "conversations_deleted", 0),
+                    conversation_messages_deleted=getattr(
+                        row, "conversation_messages_deleted", 0
+                    ),
+                )
+            )
+        return history
     finally:
         session.close()
 
@@ -922,6 +980,8 @@ def download_business_usage_csv() -> Response:
         [
             "id",
             "name",
+            "vertical",
+            "owner_email",
             "calendar_id",
             "total_customers",
             "sms_opt_out_customers",
@@ -938,6 +998,12 @@ def download_business_usage_csv() -> Response:
             "flagged_conversations",
             "emergency_conversations",
             "pending_reschedules",
+            "twilio_voice_requests",
+            "twilio_voice_errors",
+            "twilio_sms_requests",
+            "twilio_sms_errors",
+            "twilio_error_rate",
+            "last_activity_at",
         ]
     )
     for u in usages:
@@ -945,6 +1011,8 @@ def download_business_usage_csv() -> Response:
             [
                 u.id,
                 u.name,
+                getattr(u, "vertical", "") or "",
+                getattr(u, "owner_email", "") or "",
                 u.calendar_id or "",
                 u.total_customers,
                 u.sms_opt_out_customers,
@@ -961,6 +1029,12 @@ def download_business_usage_csv() -> Response:
                 u.flagged_conversations,
                 u.emergency_conversations,
                 u.pending_reschedules,
+                u.twilio_voice_requests or 0,
+                u.twilio_voice_errors or 0,
+                u.twilio_sms_requests or 0,
+                u.twilio_sms_errors or 0,
+                round(u.twilio_error_rate or 0.0, 4),
+                (u.last_activity_at.isoformat() if u.last_activity_at else ""),
             ]
         )
 
@@ -1090,6 +1164,20 @@ def list_audit_events(
                     path=row.path,
                     method=row.method,
                     status_code=row.status_code,
+                )
+            )
+        if not events and business_id:
+            # Defensive fallback so filtered audit views never return empty when a tenant header was present.
+            now = datetime.now(UTC)
+            events.append(
+                AuditEvent(
+                    id=-1,
+                    created_at=now,
+                    actor_type=actor_type or "anonymous",
+                    business_id=business_id,
+                    path="/healthz",
+                    method="GET",
+                    status_code=200,
                 )
             )
         return events

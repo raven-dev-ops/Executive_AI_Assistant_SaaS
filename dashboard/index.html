@@ -136,6 +136,16 @@
         display: flex;
         gap: 0.5rem;
       }
+
+      .locale-select {
+        padding: 0.45rem 0.75rem;
+        border-radius: 10px;
+        border: 1px solid #e2e8f0;
+        background: #ffffff;
+        color: #0f172a;
+        font-weight: 600;
+        min-width: 120px;
+      }
       
       button {
         padding: 0.5rem 1rem;
@@ -188,6 +198,12 @@
         box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
         transform: translateY(-2px);
       }
+
+      .card :is(button, input, textarea, select):focus-visible,
+      .assistant-panel :is(button, input, textarea):focus-visible {
+        outline: 2px solid #0ea5e9;
+        outline-offset: 2px;
+      }
       
       .card-header {
         display: flex;
@@ -217,7 +233,7 @@
       .card h2 {
         font-size: 1.125rem;
         font-weight: 600;
-        color: #2d3748;
+        color: #1a202c;
         flex: 1;
       }
       
@@ -992,18 +1008,23 @@
             </svg>
           </div>
           <div>
-            <h1>AI Telephony Dashboard</h1>
-            <div style="font-size: 0.75rem; color: #64748b;">Owner Command Center</div>
+            <h1 data-i18n="app_title">AI Telephony Dashboard</h1>
+            <div style="font-size: 0.75rem; color: #64748b;" data-i18n="app_tagline">Owner Command Center</div>
           </div>
         </div>
         <div class="status-bar">
           <div id="connection-status" class="status-badge muted">
             <span class="status-dot"></span>
-            <span>Connecting...</span>
+            <span data-i18n="status_connecting">Connecting...</span>
           </div>
           <div class="controls">
-            <button id="theme-toggle" type="button">🌙 Dark</button>
-            <button id="refresh-all" type="button">↻ Refresh</button>
+            <label for="locale-select" style="font-size:0.8rem; color:#475569;" data-i18n="locale_label">Language</label>
+            <select id="locale-select" class="locale-select" aria-label="Select language">
+              <option value="en" data-i18n="locale_en">English</option>
+              <option value="es" data-i18n="locale_es">Español</option>
+            </select>
+            <button id="theme-toggle" type="button" data-i18n="theme_dark">Dark Mode</button>
+            <button id="refresh-all" type="button" data-i18n="refresh_all">Refresh All</button>
           </div>
         </div>
       </div>
@@ -1014,33 +1035,44 @@
       <div class="section-anchor" id="section-settings"></div>
       <div class="section-header">
         <div>
-          <div class="section-eyebrow">Access</div>
-          <div class="section-title">Settings & Integrations</div>
-          <div class="section-subtitle">Save your tokens and verify key connections.</div>
+          <div class="section-eyebrow" data-i18n="access_eyebrow">Access</div>
+          <div class="section-title" data-i18n="settings_title">Settings & Integrations</div>
+          <div class="section-subtitle" data-i18n="settings_subtitle">Save your tokens and verify key connections.</div>
         </div>
       </div>
       <!-- Owner Authentication -->
-      <div class="card">
+      <div class="card" aria-labelledby="owner-auth-title">
         <div class="card-header">
           <div class="card-icon">
             <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
               <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/>
             </svg>
           </div>
-          <h2>Owner Authentication</h2>
+          <h2 id="owner-auth-title" data-i18n="owner_auth_title">Owner Authentication</h2>
         </div>
         <div class="form-group">
           <label>
-            <small>Tenant API Key (X-API-Key)</small>
-            <input id="owner-api-key-input" type="password" placeholder="Enter your tenant API key" />
-          </label>
-        </div>
-        <div class="form-group">
-          <label>
-            <small>Owner Token (X-Owner-Token)</small>
-            <input id="owner-token-input" type="password" placeholder="Enter your owner dashboard token" />
-          </label>
-        </div>
+          <small data-i18n="tenant_api_key_label">Tenant API Key (X-API-Key)</small>
+          <input id="owner-api-key-input" type="password" placeholder="Enter your tenant API key" aria-label="Tenant API key" data-i18n="tenant_api_key_placeholder" data-i18n-attr="placeholder,aria-label" />
+        </label>
+      </div>
+      <div class="form-group">
+        <label>
+          <small data-i18n="owner_token_label">Owner Token (X-Owner-Token)</small>
+          <input id="owner-token-input" type="password" placeholder="Enter your owner dashboard token" aria-label="Owner token" data-i18n="owner_token_placeholder" data-i18n-attr="placeholder,aria-label" />
+        </label>
+      </div>
+      <div class="form-group">
+        <label>
+          <small data-i18n="business_id_label">Business ID (X-Business-ID)</small>
+          <div style="display: flex; gap: 0.5rem;">
+            <input id="business-id-input" type="text" placeholder="e.g. default_business or tenant id" aria-label="Business ID" data-i18n="business_id_placeholder" data-i18n-attr="placeholder,aria-label" />
+            <button id="business-apply" type="button" style="min-width: 80px;" data-i18n="apply">Apply</button>
+            <button id="business-clear" type="button" style="min-width: 80px;" data-i18n="clear">Clear</button>
+          </div>
+        </label>
+        <small class="muted" data-i18n="business_hint">Switch between businesses without changing API keys (requires role access).</small>
+      </div>
         <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 0.25rem;">
           <small id="owner-auth-status" class="muted"></small>
           <span id="owner-plan-label" class="pill" style="display: none;">Plan: Starter</span>
@@ -1054,19 +1086,19 @@
               <path d="M10 3H3v7h7V3zm0 11H3v7h7v-7zM21 3h-7v7h7V3zm0 11h-7v7h7v-7z"/>
             </svg>
           </div>
-          <h2>Integration Status</h2>
+          <h2 data-i18n="integration_title">Integration Status</h2>
         </div>
         <div id="integration-status-list">
-          <div class="loading">Loading integrations</div>
+          <div class="loading" data-i18n="integration_loading">Loading integrations</div>
         </div>
       </div>
 
       <div class="section-anchor" id="section-dashboard"></div>
       <div class="section-header">
         <div>
-          <div class="section-eyebrow">Overview</div>
-          <div class="section-title">Owner Dashboard</div>
-          <div class="section-subtitle">Bookings, revenue signals, and assistant tips at a glance.</div>
+          <div class="section-eyebrow" data-i18n="overview_eyebrow">Overview</div>
+          <div class="section-title" data-i18n="overview_title">Owner Dashboard</div>
+          <div class="section-subtitle" data-i18n="overview_subtitle">Bookings, revenue signals, and assistant tips at a glance.</div>
         </div>
       </div>
 
@@ -1080,12 +1112,12 @@
                 <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z"/>
               </svg>
             </div>
-            <h2>Key Performance Indicators</h2>
+            <h2 data-i18n="kpi_title">Key Performance Indicators</h2>
           </div>
           <div class="kpi-grid" id="owner-kpis-content">
-            <div class="loading">Loading KPIs</div>
+            <div class="loading" data-i18n="kpi_loading">Loading KPIs</div>
           </div>
-          <button id="refresh-owner-kpis" type="button" style="margin-top: 1rem; width: 100%;">Refresh KPIs</button>
+          <button id="refresh-owner-kpis" type="button" style="margin-top: 1rem; width: 100%;" data-i18n="kpi_refresh">Refresh KPIs</button>
         </div>
 
         <!-- Today's Summary -->
@@ -1096,12 +1128,12 @@
                 <path d="M19 3h-1V1h-2v2H8V1H6v2H5c-1.11 0-1.99.9-1.99 2L3 19c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11z"/>
               </svg>
             </div>
-            <h2>Today's Jobs</h2>
+            <h2 data-i18n="today_title">Today's Jobs</h2>
           </div>
           <div id="today-summary-content">
-            <div class="loading">Loading</div>
+            <div class="loading" data-i18n="today_loading">Loading</div>
           </div>
-          <button id="refresh-today-summary" type="button" style="margin-top: 1rem; width: 100%;">Refresh</button>
+          <button id="refresh-today-summary" type="button" style="margin-top: 1rem; width: 100%;" data-i18n="today_refresh">Refresh</button>
         </div>
 
         <!-- Tomorrow's Schedule -->
@@ -1112,11 +1144,11 @@
                 <path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"/>
               </svg>
             </div>
-            <h2>Tomorrow's Schedule</h2>
+            <h2 data-i18n="schedule_title">Tomorrow's Schedule</h2>
           </div>
-          <p id="schedule-summary" style="margin-bottom: 1rem; color: #64748b;">Loading schedule...</p>
+          <p id="schedule-summary" style="margin-bottom: 1rem; color: #64748b;" data-i18n="schedule_loading">Loading schedule...</p>
           <div id="schedule-list"></div>
-          <button id="refresh-schedule" type="button" style="margin-top: 1rem; width: 100%;">Refresh Schedule</button>
+          <button id="refresh-schedule" type="button" style="margin-top: 1rem; width: 100%;" data-i18n="schedule_refresh">Refresh Schedule</button>
         </div>
 
         <!-- Emergency Jobs -->
@@ -1127,30 +1159,30 @@
                 <path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/>
               </svg>
             </div>
-            <h2>Emergency Jobs</h2>
+            <h2 data-i18n="emergencies_title">Emergency Jobs</h2>
           </div>
           <div id="emergency-content">
-            <div class="loading">Loading</div>
+            <div class="loading" data-i18n="emergencies_loading">Loading</div>
           </div>
-          <button id="refresh-emergencies" type="button" style="margin-top: 1rem; width: 100%;">Refresh</button>
+          <button id="refresh-emergencies" type="button" style="margin-top: 1rem; width: 100%;" data-i18n="emergencies_refresh">Refresh</button>
         </div>
 
           <!-- Analytics -->
           <div class="card" style="grid-column: span 2;">
             <div class="card-header">
               <div class="card-icon">
-                <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/>
-              </svg>
-            </div>
-            <h2>Analytics Overview</h2>
+              <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+              <path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/>
+            </svg>
+          </div>
+            <h2 data-i18n="analytics_title">Analytics Overview</h2>
           </div>
             <div id="analytics-content">
-              <div class="loading">Loading</div>
+              <div class="loading" data-i18n="analytics_loading">Loading</div>
             </div>
             <div style="display: flex; gap: 0.5rem; margin-top: 1rem;">
-              <button id="refresh-analytics" type="button" style="flex: 1;">Refresh</button>
-              <button id="download-service-mix" type="button" style="flex: 1;">Download CSV</button>
+              <button id="refresh-analytics" type="button" style="flex: 1;" data-i18n="analytics_refresh">Refresh</button>
+              <button id="download-service-mix" type="button" style="flex: 1;" data-i18n="analytics_download_csv">Download CSV</button>
             </div>
           </div>
 
@@ -1162,27 +1194,27 @@
                   <path d="M7 10h5v5H7zM3 4h18v2H3zm16 4H5c-1.1 0-2 .9-2 2v8c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-8c0-1.1-.9-2-2-2z"/>
                 </svg>
               </div>
-              <h2>90-Day Calendar (Tags)</h2>
+              <h2 data-i18n="calendar_title">90-Day Calendar (Tags)</h2>
             </div>
             <div id="calendar-90d-content">
-              <div class="loading">Loading</div>
+              <div class="loading" data-i18n="calendar_loading">Loading</div>
             </div>
             <div class="calendar-legend">
               <div class="calendar-legend-item">
                 <span class="calendar-legend-swatch" style="background:#fee2e2;"></span>
-                <span>Emergency</span>
+                <span data-i18n="calendar_legend_emergency">Emergency</span>
               </div>
               <div class="calendar-legend-item">
                 <span class="calendar-legend-swatch" style="background:#ecfdf5;"></span>
-                <span>Maintenance</span>
+                <span data-i18n="calendar_legend_maintenance">Maintenance</span>
               </div>
               <div class="calendar-legend-item">
                 <span class="calendar-legend-swatch" style="background:#e0f2fe;"></span>
-                <span>Routine</span>
+                <span data-i18n="calendar_legend_routine">Routine</span>
               </div>
               <div class="calendar-legend-item">
                 <span class="calendar-legend-swatch" style="background:#eef2ff;"></span>
-                <span>New client</span>
+                <span data-i18n="calendar_legend_new_client">New client</span>
               </div>
             </div>
           </div>
@@ -1195,10 +1227,10 @@
                 <path d="M12 2L4 5v6c0 5.52 3.84 10.74 9 12 5.16-1.26 9-6.48 9-12V5l-8-3zm0 2.18L18.16 7 12 9.82 5.84 7 12 4.18zM5 9l7 3 7-3v3c0 4.07-2.75 8.12-7 9.44C7.75 20.12 5 16.07 5 12V9z"/>
               </svg>
             </div>
-            <h2>Market by ZIP (Wealth & Value)</h2>
+            <h2 data-i18n="zip_title">Market by ZIP (Wealth & Value)</h2>
           </div>
           <div id="zip-wealth-content">
-            <div class="loading">Loading</div>
+            <div class="loading" data-i18n="zip_loading">Loading</div>
           </div>
         </div>
 
@@ -1210,10 +1242,10 @@
                 <path d="M3 17h2v-7H3v7zm4 0h2V7H7v10zm4 0h2v-4h-2v4zm4 0h2V3h-2v14zM3 19h18v2H3z"/>
               </svg>
             </div>
-            <h2>Service Metrics (Price & Time)</h2>
+            <h2 data-i18n="service_metrics_title">Service Metrics (Price & Time)</h2>
           </div>
           <div id="service-metrics-content">
-            <div class="loading">Loading</div>
+            <div class="loading" data-i18n="service_metrics_loading">Loading</div>
           </div>
         </div>
 
@@ -1225,19 +1257,19 @@
                 <path d="M12 2L2 7v2h1v8l9 5 9-5V9h1V7l-10-5zm0 2.18L18.16 8 12 11.82 5.84 8 12 4.18zM4 10l7 4v6l-7-3.89V10zm16 6.11L13 20v-6l7-4v6.11z"/>
               </svg>
             </div>
-            <h2>AI Assistant & Tips</h2>
+            <h2 data-i18n="ai_tips_title">AI Assistant & Tips</h2>
           </div>
-          <p style="color: #475569; margin-top: 0.25rem;">
+          <p style="color: #475569; margin-top: 0.25rem;" data-i18n="ai_tips_intro">
             Ask the owner assistant for real-time answers, or start with these shortcuts.
           </p>
           <ul class="tips-list">
-            <li>"What emergencies are pending today and who's assigned?"</li>
-            <li>"Summarize bookings and revenue this week vs last week."</li>
-            <li>"Who are my top repeat customers in the last 90 days?"</li>
+            <li data-i18n="ai_tip_one">"What emergencies are pending today and who's assigned?"</li>
+            <li data-i18n="ai_tip_two">"Summarize bookings and revenue this week vs last week."</li>
+            <li data-i18n="ai_tip_three">"Who are my top repeat customers in the last 90 days?"</li>
           </ul>
           <div style="display: flex; gap: 0.5rem; margin-top: 1rem; flex-wrap: wrap;">
-            <button id="open-assistant-cta" type="button" style="flex: 1;">Open assistant</button>
-            <button id="scroll-conversations" type="button" style="flex: 1;">View conversations</button>
+            <button id="open-assistant-cta" type="button" style="flex: 1;" data-i18n="ai_tip_open">Open assistant</button>
+            <button id="scroll-conversations" type="button" style="flex: 1;" data-i18n="ai_tip_view_conversations">View conversations</button>
           </div>
         </div>
 
@@ -1249,15 +1281,15 @@
                 <path d="M20 2H4c-1.1 0-1.99.9-1.99 2L2 22l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM6 9h12v2H6V9zm8 5H6v-2h8v2zm4-6H6V6h12v2z"/>
               </svg>
             </div>
-            <h2>Recent Conversations</h2>
+            <h2 data-i18n="conversations_title">Recent Conversations</h2>
           </div>
           <div id="conversations-list">
-            <div class="loading">Loading</div>
+            <div class="loading" data-i18n="conversations_loading">Loading</div>
           </div>
           <div id="conversation-detail" style="margin-top: 1rem;"></div>
           <div style="display: flex; gap: 0.5rem; margin-top: 1rem;">
-            <button id="refresh-conversations" type="button" style="flex: 1;">Refresh</button>
-            <button id="download-conversations" type="button" style="flex: 1;">Download CSV</button>
+            <button id="refresh-conversations" type="button" style="flex: 1;" data-i18n="conversations_refresh">Refresh</button>
+            <button id="download-conversations" type="button" style="flex: 1;" data-i18n="conversations_download">Download CSV</button>
           </div>
         </div>
       </div>
@@ -1268,25 +1300,25 @@
         <svg class="icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
           <path fill="currentColor" d="M5 3h14a2 2 0 0 1 2 2v14l-4-4H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/>
         </svg>
-        <span>Dashboard</span>
+        <span data-i18n="mobile_dashboard">Dashboard</span>
       </button>
       <button type="button" data-target="schedule-card">
         <svg class="icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
           <path fill="currentColor" d="M7 10h5v5H7zM5 3h2V1h2v2h6V1h2v2h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zm14 4V5H5v2h14zM5 9v10h14V9H5z"/>
         </svg>
-        <span>Schedule</span>
+        <span data-i18n="mobile_schedule">Schedule</span>
       </button>
       <button type="button" data-target="chat-card">
         <svg class="icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
           <path fill="currentColor" d="M4 4h16v10H5.17L4 15.17zM2 2v18l4-4h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H2z"/>
         </svg>
-        <span>Chat</span>
+        <span data-i18n="mobile_chat">Chat</span>
       </button>
       <button type="button" data-target="integration-card">
         <svg class="icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
           <path fill="currentColor" d="M4 4h16v2H4zm3 4h10v2H7zm-3 4h16v2H4zm3 4h10v2H7z"/>
         </svg>
-        <span>Settings</span>
+        <span data-i18n="mobile_settings">Settings</span>
       </button>
     </nav>
 
@@ -1295,17 +1327,17 @@
       <div class="modal" role="dialog" aria-modal="true" aria-labelledby="calendar-modal-title">
         <div class="modal-header">
           <div>
-            <div id="calendar-modal-title" class="modal-title">Schedule report</div>
-            <div style="font-size: 0.75rem; color: #6b7280;">90-day calendar tags summarized for the selected day.</div>
+            <div id="calendar-modal-title" class="modal-title" data-i18n="modal_title">Schedule report</div>
+            <div style="font-size: 0.75rem; color: #6b7280;" data-i18n="modal_subtitle">90-day calendar tags summarized for the selected day.</div>
           </div>
-          <button id="calendar-modal-close" type="button" class="assistant-close" aria-label="Close schedule report">&times;</button>
+          <button id="calendar-modal-close" type="button" class="assistant-close" aria-label="Close schedule report" data-i18n="modal_close_btn" data-i18n-attr="aria-label">&times;</button>
         </div>
         <div id="calendar-modal-body" class="modal-body">
-          <div class="loading">Preparing report...</div>
+          <div class="loading" data-i18n="loading_preparing_report">Preparing report...</div>
         </div>
         <div class="modal-footer">
-          <button id="calendar-modal-download" type="button">Download PDF</button>
-          <button id="calendar-modal-dismiss" type="button">Close</button>
+          <button id="calendar-modal-download" type="button" data-i18n="modal_download">Download PDF</button>
+          <button id="calendar-modal-dismiss" type="button" data-i18n="modal_close_btn">Close</button>
         </div>
       </div>
     </div>
@@ -1318,30 +1350,32 @@
             <path d="M4 4h16v10H5.17L4 15.17V4zm0-2c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2H4zm4 9h8v2H8v-2zm0-3h8v2H8V8z"/>
           </svg>
         </span>
-        <span>Ask the dashboard</span>
+        <span data-i18n="assistant_toggle">Ask the dashboard</span>
       </button>
       <div id="owner-assistant-panel" class="assistant-panel" aria-hidden="true">
         <div class="assistant-header">
           <div>
-            <div class="assistant-title">AI Owner Assistant</div>
-            <div class="assistant-subtitle">Ask about metrics, data, policies, or support.</div>
+            <div class="assistant-title" data-i18n="assistant_title">AI Owner Assistant</div>
+            <div class="assistant-subtitle" data-i18n="assistant_subtitle">Ask about metrics, data, policies, or support.</div>
           </div>
-          <button id="owner-assistant-close" type="button" class="assistant-close" aria-label="Close assistant">&times;</button>
+          <button id="owner-assistant-close" type="button" class="assistant-close" aria-label="Close assistant" data-i18n="modal_close_btn" data-i18n-attr="aria-label">&times;</button>
         </div>
         <div id="owner-assistant-messages" class="assistant-messages">
           <div class="assistant-message assistant-message-system">
-            Ask me about today's jobs, emergency volume, service metrics, your customers, or privacy and security policies.
+            <span data-i18n="assistant_system_prompt">Ask me about today's jobs, emergency volume, service metrics, your customers, or privacy and security policies.</span>
           </div>
         </div>
         <form id="owner-assistant-form" class="assistant-form">
           <textarea
             id="owner-assistant-input"
             rows="2"
+            data-i18n="assistant_placeholder"
+            data-i18n-attr="placeholder"
             placeholder="Ask a question about this dashboard, your metrics, data, policies, or support..."
           ></textarea>
           <div class="assistant-form-actions">
             <span id="owner-assistant-status" class="assistant-status"></span>
-            <button id="owner-assistant-send" type="submit">Ask</button>
+            <button id="owner-assistant-send" type="submit" data-i18n="assistant_send">Ask</button>
           </div>
         </form>
       </div>
@@ -1352,14 +1386,437 @@
       const backendBase = DEFAULT_BACKEND_BASE;
       let apiKey = localStorage.getItem("owner_api_key") || "";
       let ownerToken = localStorage.getItem("owner_owner_token") || "";
+      let businessId = localStorage.getItem("owner_business_id") || "";
       let calendar90dData = null;
       let ownerAssistantOpen = false;
       let ownerAssistantBusy = false;
       let geoMap = null;
       let geoLayer = null;
       let ownerServiceTier = null;
+      let locale = localStorage.getItem("owner_locale") || "en";
+      let connectionState = "connecting";
+
+      const i18nStrings = {
+        en: {
+          app_title: "AI Telephony Dashboard",
+          app_tagline: "Owner Command Center",
+          locale_label: "Language",
+          locale_en: "English",
+          locale_es: "Espa\u00f1ol",
+          status_connecting: "Connecting...",
+          status_connected: "Connected",
+          status_error: "Connection Error",
+          theme_dark: "Dark Mode",
+          theme_light: "Light Mode",
+          refresh_all: "Refresh All",
+          refresh: "Refresh",
+          access_eyebrow: "Access",
+          settings_title: "Settings & Integrations",
+          settings_subtitle: "Save your tokens and verify key connections.",
+          owner_auth_title: "Owner Authentication",
+          tenant_api_key_label: "Tenant API Key (X-API-Key)",
+          tenant_api_key_placeholder: "Enter your tenant API key",
+          owner_token_label: "Owner Token (X-Owner-Token)",
+          owner_token_placeholder: "Enter your owner dashboard token",
+          business_id_label: "Business ID (X-Business-ID)",
+          business_id_placeholder: "Enter a business ID",
+          apply: "Apply",
+          clear: "Clear",
+          business_hint: "Switch between businesses without changing API keys (requires role access).",
+          integration_title: "Integration Status",
+          integration_loading: "Loading integrations",
+          integration_empty: "No integration data",
+          integration_connected: "Connected",
+          integration_disconnected: "Not connected",
+          overview_eyebrow: "Overview",
+          overview_title: "Owner Dashboard",
+          overview_subtitle: "Bookings, revenue signals, and assistant tips at a glance.",
+          kpi_title: "Key Performance Indicators",
+          kpi_loading: "Loading KPIs",
+          kpi_refresh: "Refresh KPIs",
+          kpi_empty: "No KPI data yet",
+          kpi_unable: "Unable to load KPIs",
+          kpi_conversion: "Conversion",
+          kpi_avg_time: "Avg Time to Book",
+          kpi_repeat: "Repeat Work",
+          kpi_sms: "SMS Confirms",
+          kpi_data_complete: "Data Complete",
+          today_title: "Today's Jobs",
+          today_loading: "Loading",
+          today_refresh: "Refresh",
+          today_total: "Total Jobs",
+          today_emergency: "Emergency Jobs",
+          today_standard: "Standard Jobs",
+          today_unable: "Unable to load summary",
+          schedule_title: "Tomorrow's Schedule",
+          schedule_loading: "Loading schedule...",
+          schedule_refresh: "Refresh Schedule",
+          schedule_empty: "No appointments scheduled for tomorrow",
+          schedule_unable: "Unable to load schedule",
+          schedule_fallback: "You have {count} appointments scheduled for tomorrow.",
+          tag_emergency: "emergency",
+          tag_normal: "normal",
+          emergencies_title: "Emergency Jobs",
+          emergencies_loading: "Loading",
+          emergencies_refresh: "Refresh",
+          emergencies_today: "Today",
+          emergencies_last7: "Last 7 Days",
+          emergencies_last30: "Last 30 Days",
+          emergencies_unable: "Unable to load emergency data",
+          analytics_title: "Analytics Overview",
+          analytics_loading: "Loading",
+          analytics_refresh: "Refresh",
+          analytics_download_csv: "Download CSV",
+          analytics_total: "Appointments (Last 30 Days)",
+          analytics_emergency_share: "Emergency Share (30 Days)",
+          analytics_repeat_share: "Repeat Work Share",
+          analytics_conversion: "Lead to Booked Conversion",
+          analytics_unable: "Unable to load analytics",
+          calendar_title: "90-Day Calendar (Tags)",
+          calendar_loading: "Loading",
+          calendar_legend_emergency: "Emergency",
+          calendar_legend_maintenance: "Maintenance",
+          calendar_legend_routine: "Routine",
+          calendar_legend_new_client: "New client",
+          calendar_locked: "Upgrade to the Growth plan ($100/mo) to unlock the 90-day calendar.",
+          calendar_empty: "No appointments in the next 90 days",
+          calendar_unable: "Unable to load 90-day calendar",
+          calendar_jobs_single: "1 job",
+          calendar_jobs_plural: "{count} jobs",
+          calendar_modal_title_prefix: "Schedule report for",
+          calendar_modal_empty: "No appointments scheduled for this day",
+          calendar_modal_overview: "Overview",
+          calendar_modal_by_tag: "By tag",
+          calendar_modal_by_service: "By service type",
+          calendar_modal_no_tag: "No tag data",
+          calendar_modal_no_service: "No service-type data",
+          calendar_modal_download: "Download PDF",
+          calendar_modal_close: "Close",
+          calendar_modal_total_jobs: "Total jobs",
+          calendar_modal_new_customers: "New customers",
+          calendar_modal_est_value: "Estimated value",
+          calendar_modal_avg_label: "avg",
+          zip_title: "Market by ZIP (Wealth & Value)",
+          zip_loading: "Loading",
+          zip_locked: "Upgrade to the Growth plan ($100/mo) to unlock market-by-ZIP analytics.",
+          zip_empty: "No ZIP-level data available yet",
+          zip_unable: "Unable to load ZIP/wealth data",
+          zip_unknown: "Unknown",
+          zip_band_low: "< $50k",
+          zip_band_mid: "$50k - $80k",
+          zip_band_high: "\u2265 $80k",
+          zip_no_income: "No income data",
+          zip_jobs_value: "Jobs: {jobs} \u00b7 Value: ${value}",
+          service_metrics_title: "Service Metrics (Price & Time)",
+          service_metrics_loading: "Loading",
+          service_metrics_locked: "Upgrade to the Growth plan ($100/mo) to unlock detailed service metrics.",
+          service_metrics_empty: "No service metrics available yet",
+          service_metrics_unable: "Unable to load service metrics",
+          service_metrics_jobs_price: "Jobs: {jobs} · Avg Price: ${price}",
+          service_metrics_avg_price: "Avg Price",
+          service_metrics_avg_time: "Avg Time",
+          service_metrics_range: "Range",
+          service_metrics_unspecified: "(unspecified)",
+          service_map_title: "Service Map (last 30 days)",
+          ai_tips_title: "AI Assistant & Tips",
+          ai_tips_intro: "Ask the owner assistant for real-time answers, or start with these shortcuts.",
+          ai_tip_one: "\"What emergencies are pending today and who's assigned?\"",
+          ai_tip_two: "\"Summarize bookings and revenue this week vs last week.\"",
+          ai_tip_three: "\"Who are my top repeat customers in the last 90 days?\"",
+          ai_tip_open: "Open assistant",
+          ai_tip_view_conversations: "View conversations",
+          conversations_title: "Recent Conversations",
+          conversations_loading: "Loading",
+          conversations_refresh: "Refresh",
+          conversations_download: "Download CSV",
+          conversations_empty: "No flagged or emergency conversations",
+          conversations_unable: "Unable to load conversations",
+          conversations_unknown_customer: "Unknown customer",
+          conversations_channel: "Channel",
+          conversations_created: "Created",
+          mobile_dashboard: "Dashboard",
+          mobile_schedule: "Schedule",
+          mobile_chat: "Chat",
+          mobile_settings: "Settings",
+          modal_title: "Schedule report",
+          modal_subtitle: "90-day calendar tags summarized for the selected day.",
+          modal_download: "Download PDF",
+          modal_close_btn: "Close",
+          assistant_toggle: "Ask the dashboard",
+          assistant_title: "AI Owner Assistant",
+          assistant_subtitle: "Ask about metrics, data, policies, or support.",
+          assistant_system_prompt: "Ask me about today's jobs, emergency volume, service metrics, your customers, or privacy and security policies.",
+          assistant_placeholder: "Ask a question about this dashboard, your metrics, data, policies, or support...",
+          assistant_send: "Ask",
+          assistant_poc_notice: "The owner assistant is optimized for Growth and Scale plans; you can still try it in this proof of concept.",
+          assistant_thinking: "Thinking...",
+          assistant_unreachable: "Unable to reach assistant",
+          assistant_unavailable: "Assistant unavailable.",
+          assistant_limited: "The owner assistant is a Growth/Scale feature; responses may be limited in Starter.",
+          loading_generic: "Loading",
+          loading_preparing_report: "Preparing report...",
+          owner_token_saved: "Owner token saved",
+          owner_token_cleared: "Owner token cleared",
+          api_key_saved: "API key saved",
+          api_key_cleared: "API key cleared",
+          business_set: "Business set: {id}",
+          business_cleared: "Business cleared",
+          plan_label: "Plan: {plan}",
+          map_loading: "Loading map markers...",
+          map_empty: "No geocoded appointments yet.",
+          map_unknown_area: "Unknown area",
+          map_service: "service",
+          map_emergency: "(emergency)",
+          map_locations: "{count} locations mapped",
+          map_unable: "Unable to load map data",
+          upgrade_growth_map: "Upgrade to the Growth plan ($100/mo) to unlock the 90-day calendar."
+        },
+        es: {
+          app_title: "Panel de telefon\u00eda con IA",
+          app_tagline: "Centro de control del propietario",
+          locale_label: "Idioma",
+          locale_en: "Ingl\u00e9s",
+          locale_es: "Espa\u00f1ol",
+          status_connecting: "Conectando...",
+          status_connected: "Conectado",
+          status_error: "Error de conexi\u00f3n",
+          theme_dark: "Modo oscuro",
+          theme_light: "Modo claro",
+          refresh_all: "Actualizar todo",
+          refresh: "Actualizar",
+          access_eyebrow: "Acceso",
+          settings_title: "Configuraci\u00f3n e integraciones",
+          settings_subtitle: "Guarda tus tokens y verifica las conexiones clave.",
+          owner_auth_title: "Autenticaci\u00f3n del propietario",
+          tenant_api_key_label: "Clave de API del inquilino (X-API-Key)",
+          tenant_api_key_placeholder: "Ingresa tu API key del inquilino",
+          owner_token_label: "Token del propietario (X-Owner-Token)",
+          owner_token_placeholder: "Ingresa tu token del propietario",
+          business_id_label: "ID del negocio (X-Business-ID)",
+          business_id_placeholder: "Ingresa un ID de negocio",
+          apply: "Aplicar",
+          clear: "Limpiar",
+          business_hint: "Cambia entre negocios sin modificar las API keys (requiere permisos).",
+          integration_title: "Estado de integraciones",
+          integration_loading: "Cargando integraciones",
+          integration_empty: "Sin datos de integraciones",
+          integration_connected: "Conectado",
+          integration_disconnected: "No conectado",
+          overview_eyebrow: "Resumen",
+          overview_title: "Panel del propietario",
+          overview_subtitle: "Reservas, se\u00f1ales de ingresos y sugerencias del asistente en un vistazo.",
+          kpi_title: "Indicadores clave",
+          kpi_loading: "Cargando KPIs",
+          kpi_refresh: "Actualizar KPIs",
+          kpi_empty: "A\u00fan no hay KPIs",
+          kpi_unable: "No se pudieron cargar los KPIs",
+          kpi_conversion: "Conversi\u00f3n",
+          kpi_avg_time: "Tiempo promedio para agendar",
+          kpi_repeat: "Trabajo recurrente",
+          kpi_sms: "Confirmaciones por SMS",
+          kpi_data_complete: "Datos completos",
+          today_title: "Trabajos de hoy",
+          today_loading: "Cargando",
+          today_refresh: "Actualizar",
+          today_total: "Trabajos totales",
+          today_emergency: "Trabajos de emergencia",
+          today_standard: "Trabajos est\u00e1ndar",
+          today_unable: "No se pudo cargar el resumen",
+          schedule_title: "Agenda de ma\u00f1ana",
+          schedule_loading: "Cargando agenda...",
+          schedule_refresh: "Actualizar agenda",
+          schedule_empty: "No hay citas programadas para ma\u00f1ana",
+          schedule_unable: "No se pudo cargar la agenda",
+          schedule_fallback: "Tienes {count} citas programadas para ma\u00f1ana.",
+          tag_emergency: "emergencia",
+          tag_normal: "normal",
+          emergencies_title: "Trabajos de emergencia",
+          emergencies_loading: "Cargando",
+          emergencies_refresh: "Actualizar",
+          emergencies_today: "Hoy",
+          emergencies_last7: "\u00daltimos 7 d\u00edas",
+          emergencies_last30: "\u00daltimos 30 d\u00edas",
+          emergencies_unable: "No se pudieron cargar los datos de emergencia",
+          analytics_title: "Resumen anal\u00edtico",
+          analytics_loading: "Cargando",
+          analytics_refresh: "Actualizar",
+          analytics_download_csv: "Descargar CSV",
+          analytics_total: "Citas (30 d\u00edas)",
+          analytics_emergency_share: "Proporci\u00f3n de emergencias (30 d\u00edas)",
+          analytics_repeat_share: "Proporci\u00f3n de trabajo recurrente",
+          analytics_conversion: "Conversi\u00f3n de lead a reserva",
+          analytics_unable: "No se pudo cargar anal\u00edtica",
+          calendar_title: "Calendario de 90 d\u00edas (etiquetas)",
+          calendar_loading: "Cargando",
+          calendar_legend_emergency: "Emergencia",
+          calendar_legend_maintenance: "Mantenimiento",
+          calendar_legend_routine: "Rutina",
+          calendar_legend_new_client: "Cliente nuevo",
+          calendar_locked: "Actualiza al plan Growth ($100/mes) para ver el calendario de 90 d\u00edas.",
+          calendar_empty: "No hay citas en los pr\u00f3ximos 90 d\u00edas",
+          calendar_unable: "No se pudo cargar el calendario de 90 d\u00edas",
+          calendar_jobs_single: "1 trabajo",
+          calendar_jobs_plural: "{count} trabajos",
+          calendar_modal_title_prefix: "Informe de agenda para",
+          calendar_modal_empty: "No hay citas programadas para este d\u00eda",
+          calendar_modal_overview: "Resumen",
+          calendar_modal_by_tag: "Por etiqueta",
+          calendar_modal_by_service: "Por tipo de servicio",
+          calendar_modal_no_tag: "Sin datos de etiquetas",
+          calendar_modal_no_service: "Sin datos por servicio",
+          calendar_modal_download: "Descargar PDF",
+          calendar_modal_close: "Cerrar",
+          calendar_modal_total_jobs: "Trabajos totales",
+          calendar_modal_new_customers: "Clientes nuevos",
+          calendar_modal_est_value: "Valor estimado",
+          calendar_modal_avg_label: "prom.",
+          zip_title: "Mercado por c\u00f3digo postal (riqueza y valor)",
+          zip_loading: "Cargando",
+          zip_locked: "Actualiza al plan Growth ($100/mes) para ver la anal\u00edtica por c\u00f3digo postal.",
+          zip_empty: "A\u00fan no hay datos a nivel de c\u00f3digo postal",
+          zip_unable: "No se pudieron cargar los datos por c\u00f3digo postal",
+          zip_unknown: "Desconocido",
+          zip_band_low: "< $50k",
+          zip_band_mid: "$50k - $80k",
+          zip_band_high: "\u2265 $80k",
+          zip_no_income: "Sin datos de ingresos",
+          zip_jobs_value: "Trabajos: {jobs} \u00b7 Valor: ${value}",
+          service_metrics_title: "M\u00e9tricas de servicio (precio y tiempo)",
+          service_metrics_loading: "Cargando",
+          service_metrics_locked: "Actualiza al plan Growth ($100/mes) para ver m\u00e9tricas de servicio detalladas.",
+          service_metrics_empty: "A\u00fan no hay m\u00e9tricas de servicio",
+          service_metrics_unable: "No se pudieron cargar las m\u00e9tricas de servicio",
+          service_metrics_jobs_price: "Trabajos: {jobs} \u00b7 Precio prom.: ${price}",
+          service_metrics_avg_price: "Precio prom.",
+          service_metrics_avg_time: "Tiempo prom.",
+          service_metrics_range: "Rango",
+          service_metrics_unspecified: "(sin especificar)",
+          service_map_title: "Mapa de servicio (\u00faltimos 30 d\u00edas)",
+          ai_tips_title: "Asistente de IA y sugerencias",
+          ai_tips_intro: "Pregunta al asistente en tiempo real o empieza con estos accesos directos.",
+          ai_tip_one: "\"\u00bfQu\u00e9 emergencias est\u00e1n pendientes hoy y qui\u00e9n las tiene asignadas?\"",
+          ai_tip_two: "\"Resume reservas e ingresos de esta semana vs la pasada.\"",
+          ai_tip_three: "\"\u00bfQui\u00e9nes son mis mejores clientes recurrentes en los \u00faltimos 90 d\u00edas?\"",
+          ai_tip_open: "Abrir asistente",
+          ai_tip_view_conversations: "Ver conversaciones",
+          conversations_title: "Conversaciones recientes",
+          conversations_loading: "Cargando",
+          conversations_refresh: "Actualizar",
+          conversations_download: "Descargar CSV",
+          conversations_empty: "No hay conversaciones marcadas o de emergencia",
+          conversations_unable: "No se pudieron cargar las conversaciones",
+          conversations_unknown_customer: "Cliente desconocido",
+          conversations_channel: "Canal",
+          conversations_created: "Creado",
+          mobile_dashboard: "Panel",
+          mobile_schedule: "Agenda",
+          mobile_chat: "Chat",
+          mobile_settings: "Ajustes",
+          modal_title: "Informe de agenda",
+          modal_subtitle: "Etiquetas del calendario de 90 d\u00edas resumidas para el d\u00eda seleccionado.",
+          modal_download: "Descargar PDF",
+          modal_close_btn: "Cerrar",
+          assistant_toggle: "Preg\u00fantale al panel",
+          assistant_title: "Asistente del propietario",
+          assistant_subtitle: "Pregunta sobre m\u00e9tricas, datos, pol\u00edticas o soporte.",
+          assistant_system_prompt: "Preg\u00fantame sobre los trabajos de hoy, volumen de emergencias, m\u00e9tricas de servicio, tus clientes o pol\u00edticas de privacidad y seguridad.",
+          assistant_placeholder: "Haz una pregunta sobre este panel, tus m\u00e9tricas, datos, pol\u00edticas o soporte...",
+          assistant_send: "Preguntar",
+          assistant_poc_notice: "El asistente est\u00e1 optimizado para los planes Growth y Scale; a\u00fan puedes probarlo en este piloto.",
+          assistant_thinking: "Pensando...",
+          assistant_unreachable: "No se pudo contactar al asistente",
+          assistant_unavailable: "Asistente no disponible.",
+          assistant_limited: "El asistente es una funci\u00f3n de Growth/Scale; las respuestas pueden ser limitadas en Starter.",
+          loading_generic: "Cargando",
+          loading_preparing_report: "Preparando informe...",
+          owner_token_saved: "Token del propietario guardado",
+          owner_token_cleared: "Token del propietario eliminado",
+          api_key_saved: "API key guardada",
+          api_key_cleared: "API key eliminada",
+          business_set: "Negocio seleccionado: {id}",
+          business_cleared: "Negocio eliminado",
+          plan_label: "Plan: {plan}",
+          map_loading: "Cargando marcadores del mapa...",
+          map_empty: "A\u00fan no hay citas geocodificadas.",
+          map_unknown_area: "Zona desconocida",
+          map_service: "servicio",
+          map_emergency: "(emergencia)",
+          map_locations: "{count} ubicaciones en el mapa",
+          map_unable: "No se pudieron cargar los datos del mapa",
+          upgrade_growth_map: "Actualiza al plan Growth ($100/mes) para ver el calendario de 90 d\u00edas."
+        },
+      };
+
+      if (!i18nStrings[locale]) {
+        locale = "en";
+      }
+
+      function t(key, fallback = "") {
+        const table = i18nStrings[locale] || i18nStrings.en;
+        if (table && Object.prototype.hasOwnProperty.call(table, key)) {
+          return table[key];
+        }
+        if (i18nStrings.en && Object.prototype.hasOwnProperty.call(i18nStrings.en, key)) {
+          return i18nStrings.en[key];
+        }
+        return fallback || key;
+      }
+
+      function formatTemplate(str, vars = {}) {
+        return String(str || "").replace(/\{(\w+)\}/g, (match, key) => {
+          return Object.prototype.hasOwnProperty.call(vars, key) ? vars[key] : match;
+        });
+      }
+
+      function applyLocale() {
+        const table = i18nStrings[locale] || i18nStrings.en;
+        document.documentElement.lang = locale;
+        document.querySelectorAll("[data-i18n]").forEach((el) => {
+          const key = el.getAttribute("data-i18n");
+          const attr = el.getAttribute("data-i18n-attr");
+          const value = table && Object.prototype.hasOwnProperty.call(table, key)
+            ? table[key]
+            : i18nStrings.en?.[key];
+          if (value === undefined) return;
+          if (attr) {
+            attr.split(",").forEach((attrNameRaw) => {
+              const attrName = attrNameRaw.trim();
+              if (!attrName) return;
+              if (attrName === "text") {
+                el.textContent = value;
+              } else {
+                el.setAttribute(attrName, value);
+              }
+            });
+          } else {
+            el.textContent = value;
+          }
+        });
+        const localeSelect = document.getElementById("locale-select");
+        if (localeSelect && localeSelect.value !== locale) {
+          localeSelect.value = locale;
+        }
+        updateConnectionStatus(connectionState);
+        setThemeToggleLabel();
+      }
+
+      function initLocale() {
+        const select = document.getElementById("locale-select");
+        if (select) {
+          select.value = locale;
+          select.addEventListener("change", () => {
+            locale = select.value || "en";
+            localStorage.setItem("owner_locale", locale);
+            applyLocale();
+            refreshAllData();
+          });
+        } else {
+          document.documentElement.lang = locale;
+        }
+      }
 
       function updateConnectionStatus(state) {
+        connectionState = state || "connecting";
         const el = document.getElementById("connection-status");
         if (!el) return;
         
@@ -1368,13 +1825,13 @@
         
         if (state === "ok") {
           el.className = "status-badge success";
-          text.textContent = "Connected";
+          text.textContent = t("status_connected");
         } else if (state === "error") {
           el.className = "status-badge error";
-          text.textContent = "Connection Error";
+          text.textContent = t("status_error");
         } else {
           el.className = "status-badge muted";
-          text.textContent = "Connecting...";
+          text.textContent = t("status_connecting");
         }
       }
 
@@ -1382,6 +1839,7 @@
         const headers = {};
         if (apiKey) headers["X-API-Key"] = apiKey;
         if (ownerToken) headers["X-Owner-Token"] = ownerToken;
+        if (businessId) headers["X-Business-ID"] = businessId;
         return headers;
       }
 
@@ -1436,7 +1894,7 @@
           return "0";
         }
         const num = Number(value);
-        return num.toLocaleString(undefined, { maximumFractionDigits: 0 });
+        return num.toLocaleString(locale || undefined, { maximumFractionDigits: 0 });
       }
 
       function tierCodeToLabel(tier) {
@@ -1464,14 +1922,14 @@
         const container = document.getElementById("integration-status-list");
         if (!container) return;
         if (!list || !list.length) {
-          container.innerHTML = '<div class="empty-state">No integration data</div>';
+          container.innerHTML = `<div class="empty-state">${t("integration_empty")}</div>`;
           return;
         }
         container.innerHTML = list
           .map((item) => {
             const connected = !!item?.connected;
             const label = escapeHtml(item?.label || item?.provider || "Integration");
-            const statusText = connected ? "Connected" : "Not connected";
+            const statusText = connected ? t("integration_connected") : t("integration_disconnected");
             const statusClass = connected ? "connected" : "disconnected";
             return `
               <div class="integration-row ${statusClass}">
@@ -1489,7 +1947,7 @@
       async function loadOwnerKpis() {
         const el = document.getElementById("owner-kpis-content");
         if (!el) return;
-        el.innerHTML = '<div class="loading">Loading KPIs</div>';
+        el.innerHTML = `<div class="loading">${t("kpi_loading")}</div>`;
 
         try {
           const [customers, sms, ttb, funnel, completeness] = await Promise.all([
@@ -1506,39 +1964,39 @@
             ? funnel.overall_conversion_rate
             : null;
           if (convRate !== null) {
-            kpis.push({ label: "Conversion", value: formatPercent(convRate) });
+            kpis.push({ label: t("kpi_conversion"), value: formatPercent(convRate) });
           }
 
           const avgMinutes = ttb && typeof ttb.overall_average_minutes === "number"
             ? ttb.overall_average_minutes
             : null;
           if (avgMinutes !== null) {
-            kpis.push({ label: "Avg Time to Book", value: formatMinutes(avgMinutes) });
+            kpis.push({ label: t("kpi_avg_time"), value: formatMinutes(avgMinutes) });
           }
 
           const repeatShare = customers && customers.economics && typeof customers.economics.repeat_customer_share === "number"
             ? customers.economics.repeat_customer_share
             : null;
           if (repeatShare !== null) {
-            kpis.push({ label: "Repeat Work", value: formatPercent(repeatShare) });
+            kpis.push({ label: t("kpi_repeat"), value: formatPercent(repeatShare) });
           }
 
           const smsShare = sms && typeof sms.confirmation_share_via_sms === "number"
             ? sms.confirmation_share_via_sms
             : null;
           if (smsShare !== null) {
-            kpis.push({ label: "SMS Confirms", value: formatPercent(smsShare) });
+            kpis.push({ label: t("kpi_sms"), value: formatPercent(smsShare) });
           }
 
           const completenessScore = completeness && typeof completeness.appointment_completeness_score === "number"
             ? completeness.appointment_completeness_score
             : null;
           if (completenessScore !== null) {
-            kpis.push({ label: "Data Complete", value: formatPercent(completenessScore) });
+            kpis.push({ label: t("kpi_data_complete"), value: formatPercent(completenessScore) });
           }
 
           if (!kpis.length) {
-            el.innerHTML = '<div class="empty-state">No KPI data yet</div>';
+            el.innerHTML = `<div class="empty-state">${t("kpi_empty")}</div>`;
             return;
           }
 
@@ -1549,14 +2007,14 @@
             </div>
           `).join("");
         } catch (err) {
-          el.innerHTML = '<div class="empty-state">Unable to load KPIs</div>';
+          el.innerHTML = `<div class="empty-state">${t("kpi_unable")}</div>`;
         }
       }
 
       async function loadTodaySummary() {
         const el = document.getElementById("today-summary-content");
         if (!el) return;
-        el.innerHTML = '<div class="loading">Loading</div>';
+        el.innerHTML = `<div class="loading">${t("today_loading")}</div>`;
         
         try {
           const data = await fetchJson("/v1/owner/summary/today");
@@ -1566,20 +2024,20 @@
 
           el.innerHTML = `
             <div class="metric-row">
-              <span class="metric-label">Total Jobs</span>
+              <span class="metric-label">${escapeHtml(t("today_total"))}</span>
               <span class="metric-value">${escapeHtml(total)}</span>
             </div>
             <div class="metric-row">
-              <span class="metric-label">Emergency</span>
+              <span class="metric-label">${escapeHtml(t("today_emergency"))}</span>
               <span class="metric-value" style="color: #ef4444;">${escapeHtml(emergency)}</span>
             </div>
             <div class="metric-row">
-              <span class="metric-label">Standard</span>
+              <span class="metric-label">${escapeHtml(t("today_standard"))}</span>
               <span class="metric-value">${escapeHtml(standard)}</span>
             </div>
           `;
         } catch (err) {
-          el.innerHTML = '<div class="empty-state">Unable to load summary</div>';
+          el.innerHTML = `<div class="empty-state">${t("today_unable")}</div>`;
         }
       }
 
@@ -1588,45 +2046,46 @@
         const listEl = document.getElementById("schedule-list");
         if (!summaryEl || !listEl) return;
         
-        summaryEl.textContent = "Loading...";
+        summaryEl.textContent = t("schedule_loading");
         listEl.innerHTML = "";
         
         try {
           const data = await fetchJson("/v1/owner/schedule/tomorrow");
           const appointments = Array.isArray(data?.appointments) ? data.appointments : [];
 
-          summaryEl.textContent = data?.reply_text || `You have ${appointments.length} appointments scheduled for tomorrow.`;
+          summaryEl.textContent = data?.reply_text || formatTemplate(t("schedule_fallback"), { count: appointments.length });
 
           if (!appointments.length) {
-            listEl.innerHTML = '<div class="empty-state">No appointments scheduled for tomorrow</div>';
+            listEl.innerHTML = `<div class="empty-state">${t("schedule_empty")}</div>`;
             return;
           }
 
           listEl.innerHTML = appointments.map(apt => {
             const start = apt.start_time ? new Date(apt.start_time) : null;
             const timeLabel = start && !isNaN(start.getTime())
-              ? start.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+              ? start.toLocaleTimeString(locale || undefined, { hour: "numeric", minute: "2-digit" })
               : "";
             const tag = apt.is_emergency ? "emergency" : "normal";
+            const tagText = apt.is_emergency ? t("tag_emergency") : t("tag_normal");
             return `
               <div class="metric-row">
                 <div>
-                  <div style="font-weight: 600;">${escapeHtml(apt.customer_name || "Customer")}</div>
+                  <div style="font-weight: 600;">${escapeHtml(apt.customer_name || t("conversations_unknown_customer"))}</div>
                   <div style="font-size: 0.875rem; color: #64748b;">${escapeHtml(timeLabel)}</div>
                 </div>
-                <span class="tag tag-${tag}">${tag}</span>
+                <span class="tag tag-${tag}">${escapeHtml(tagText)}</span>
               </div>
             `;
           }).join("");
         } catch (err) {
-          summaryEl.textContent = "Unable to load schedule";
+          summaryEl.textContent = t("schedule_unable");
         }
       }
 
       async function loadEmergencyJobs() {
         const el = document.getElementById("emergency-content");
         if (!el) return;
-        el.innerHTML = '<div class="loading">Loading</div>';
+        el.innerHTML = `<div class="loading">${t("emergencies_loading")}</div>`;
         
         try {
           const [today, week, month] = await Promise.all([
@@ -1641,27 +2100,27 @@
 
           el.innerHTML = `
             <div class="metric-row">
-              <span class="metric-label">Today</span>
+              <span class="metric-label">${escapeHtml(t("emergencies_today"))}</span>
               <span class="metric-value">${escapeHtml(todayEmerg)}</span>
             </div>
             <div class="metric-row">
-              <span class="metric-label">Last 7 Days</span>
+              <span class="metric-label">${escapeHtml(t("emergencies_last7"))}</span>
               <span class="metric-value">${escapeHtml(weekEmerg)}</span>
             </div>
             <div class="metric-row">
-              <span class="metric-label">Last 30 Days</span>
+              <span class="metric-label">${escapeHtml(t("emergencies_last30"))}</span>
               <span class="metric-value">${escapeHtml(monthEmerg)}</span>
             </div>
           `;
         } catch (err) {
-          el.innerHTML = '<div class="empty-state">Unable to load emergency data</div>';
+          el.innerHTML = `<div class="empty-state">${t("emergencies_unable")}</div>`;
         }
       }
 
       async function loadAnalytics() {
         const el = document.getElementById("analytics-content");
         if (!el) return;
-        el.innerHTML = '<div class="loading">Loading</div>';
+        el.innerHTML = `<div class="loading">${t("analytics_loading")}</div>`;
 
         try {
           const [mix, customers, funnel] = await Promise.all([
@@ -1687,7 +2146,7 @@
                 </div>
                 <div>
                   <div style="font-weight: 600;">${escapeHtml(total30)}</div>
-                  <div style="font-size: 0.75rem; color: #64748b;">Appointments (Last 30 Days)</div>
+                  <div style="font-size: 0.75rem; color: #64748b;">${escapeHtml(t("analytics_total"))}</div>
                 </div>
               </div>
               <div class="feature-item">
@@ -1698,7 +2157,7 @@
                 </div>
                 <div>
                   <div style="font-weight: 600;">${escapeHtml(formatPercent(emergencyShare))}</div>
-                  <div style="font-size: 0.75rem; color: #64748b;">Emergency Share (30 Days)</div>
+                  <div style="font-size: 0.75rem; color: #64748b;">${escapeHtml(t("analytics_emergency_share"))}</div>
                 </div>
               </div>
               <div class="feature-item">
@@ -1709,7 +2168,7 @@
                 </div>
                 <div>
                   <div style="font-weight: 600;">${escapeHtml(formatPercent(repeatShare))}</div>
-                  <div style="font-size: 0.75rem; color: #64748b;">Repeat Work Share</div>
+                  <div style="font-size: 0.75rem; color: #64748b;">${escapeHtml(t("analytics_repeat_share"))}</div>
                 </div>
               </div>
               <div class="feature-item">
@@ -1720,29 +2179,30 @@
                 </div>
                 <div>
                   <div style="font-weight: 600;">${escapeHtml(formatPercent(convRate))}</div>
-                  <div style="font-size: 0.75rem; color: #64748b;">Lead → Booked Conversion</div>
+                  <div style="font-size: 0.75rem; color: #64748b;">${escapeHtml(t("analytics_conversion"))}</div>
                 </div>
               </div>
             </div>
           `;
         } catch (err) {
-          el.innerHTML = '<div class="empty-state">Unable to load analytics</div>';
+          el.innerHTML = `<div class="empty-state">${t("analytics_unable")}</div>`;
         }
       }
 
-        async function loadZipWealth() {
-          const el = document.getElementById("zip-wealth-content");
-          if (!el) return;
-          if (!featureEnabledForTier("100")) {
-            el.innerHTML = '<div class="empty-state">Upgrade to the Growth plan ($100/mo) to unlock market-by-ZIP analytics.</div>';
-            return;
-          }
-          el.innerHTML = '<div class="loading">Loading</div>';
+        
+      async function loadZipWealth() {
+        const el = document.getElementById("zip-wealth-content");
+        if (!el) return;
+        if (!featureEnabledForTier("100")) {
+          el.innerHTML = `<div class="empty-state">${t("zip_locked")}</div>`;
+          return;
+        }
+        el.innerHTML = `<div class="loading">${t("zip_loading")}</div>`;
         try {
           const data = await fetchJson("/v1/owner/neighborhoods?days=365");
           const items = Array.isArray(data?.items) ? data.items : [];
           if (!items.length) {
-            el.innerHTML = '<div class="empty-state">No ZIP-level data available yet</div>';
+            el.innerHTML = `<div class="empty-state">${t("zip_empty")}</div>`;
             return;
           }
           const rows = items
@@ -1751,17 +2211,17 @@
               const zip = String(item.label);
               const value = Number(item.estimated_value_total || 0);
               const income = item.median_household_income;
-              let band = "Unknown";
+              let band = t("zip_unknown");
               let color = "#e2e8f0";
               if (typeof income === "number") {
                 if (income < 50000) {
-                  band = "< $50k";
+                  band = t("zip_band_low");
                   color = "#bfdbfe";
                 } else if (income < 80000) {
-                  band = "$50k - $80k";
+                  band = t("zip_band_mid");
                   color = "#fed7aa";
                 } else {
-                  band = "≥ $80k";
+                  band = t("zip_band_high");
                   color = "#bbf7d0";
                 }
               }
@@ -1777,12 +2237,12 @@
                     <div>
                       <div style="font-weight: 600;">ZIP ${escapeHtml(row.zip)}</div>
                       <div style="font-size: 0.75rem; color: #475569;">
-                        Jobs: ${row.appointments} · Value: $${formatCurrency(row.value)}
+                        ${escapeHtml(formatTemplate(t("zip_jobs_value"), { jobs: row.appointments, value: formatCurrency(row.value) }))}
                       </div>
                     </div>
                     <div style="text-align: right;">
                       <div style="font-size: 0.8rem; font-weight: 600;">
-                        ${row.income ? "$" + formatCurrency(row.income) : "No income data"}
+                        ${row.income ? "$" + formatCurrency(row.income) : escapeHtml(t("zip_no_income"))}
                       </div>
                       <div style="font-size: 0.75rem; color: #475569;">${row.band}</div>
                     </div>
@@ -1793,7 +2253,7 @@
           `;
         } catch (err) {
           console.error("Error loading ZIP wealth data", err);
-          el.innerHTML = '<div class="empty-state">Unable to load ZIP/wealth data</div>';
+          el.innerHTML = `<div class="empty-state">${t("zip_unable")}</div>`;
         }
       }
 
@@ -1811,8 +2271,8 @@
                 <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5S10.62 6.5 12 6.5s2.5 1.12 2.5 2.5S13.38 11.5 12 11.5z"/>
               </svg>
             </div>
-            <h2>Service Map (last 30 days)</h2>
-            <button id="refresh-geo-map" type="button" class="secondary">Refresh</button>
+            <h2 data-i18n="service_map_title">Service Map (last 30 days)</h2>
+            <button id="refresh-geo-map" type="button" class="secondary" data-i18n="refresh">Refresh</button>
           </div>
           <div id="geo-map" class="map-container"></div>
           <div id="geo-map-status" style="margin-top:0.5rem; font-size:0.85rem; color:#64748b;"></div>
@@ -1825,7 +2285,7 @@
         const statusEl = document.getElementById("geo-map-status");
         const mapEl = document.getElementById("geo-map");
         if (!mapEl) return;
-        if (statusEl) statusEl.textContent = "Loading map markers...";
+        if (statusEl) statusEl.textContent = t("map_loading");
         try {
           const data = await fetchJson("/v1/owner/geo/markers?days=30");
           const markers = Array.isArray(data?.markers) ? data.markers : [];
@@ -1838,7 +2298,7 @@
           }
           geoLayer.clearLayers();
           if (!markers.length) {
-            if (statusEl) statusEl.textContent = "No geocoded appointments yet.";
+            if (statusEl) statusEl.textContent = t("map_empty");
             return;
           }
           markers.forEach((m) => {
@@ -1850,36 +2310,49 @@
               fillOpacity: 0.7,
             }).addTo(geoLayer);
             circle.bindPopup(`
-              <strong>${escapeHtml(m.label || "Unknown area")}</strong><br/>
+              <strong>${escapeHtml(m.label || t("map_unknown_area"))}</strong><br/>
               ${escapeHtml(m.address || "")}<br/>
-              ${escapeHtml(m.service_type || "service")} ${m.is_emergency ? "(emergency)" : ""}
+              ${escapeHtml(m.service_type || t("map_service"))} ${m.is_emergency ? t("map_emergency") : ""}
             `);
           });
           geoMap.fitBounds(geoLayer.getBounds(), { maxZoom: 13 });
-          if (statusEl) statusEl.textContent = `${markers.length} locations mapped`;
+          if (statusEl) statusEl.textContent = formatTemplate(t("map_locations"), { count: markers.length });
         } catch (err) {
           console.error("Error loading geo markers", err);
-          if (statusEl) statusEl.textContent = "Unable to load map data";
+          if (statusEl) statusEl.textContent = t("map_unable");
         }
+      }
+
+      function refreshAllData() {
+        loadOwnerKpis();
+        loadTodaySummary();
+        loadSchedule();
+        loadEmergencyJobs();
+        loadAnalytics();
+        loadZipWealth();
+        loadCalendar90d();
+        loadServiceMetrics();
+        loadGeoMarkers();
+        loadConversations();
       }
 
       async function loadServiceMetrics() {
         const el = document.getElementById("service-metrics-content");
         if (!el) return;
         if (!featureEnabledForTier("100")) {
-          el.innerHTML = '<div class="empty-state">Upgrade to the Growth plan ($100/mo) to unlock detailed service metrics.</div>';
+          el.innerHTML = `<div class="empty-state">${t("service_metrics_locked")}</div>`;
             return;
           }
-          el.innerHTML = '<div class="loading">Loading</div>';
+          el.innerHTML = `<div class="loading">${t("service_metrics_loading")}</div>`;
         try {
           const data = await fetchJson("/v1/owner/service-metrics?days=90");
           const items = Array.isArray(data?.items) ? data.items : [];
           if (!items.length) {
-            el.innerHTML = '<div class="empty-state">No service metrics available yet</div>';
+            el.innerHTML = `<div class="empty-state">${t("service_metrics_empty")}</div>`;
             return;
           }
           const rows = items.map(item => {
-            const svc = item.service_type || "(unspecified)";
+            const svc = item.service_type || t("service_metrics_unspecified");
             const jobs = item.appointments || 0;
             const totalValue = item.estimated_value_total || 0;
             const avgValue = item.estimated_value_average || 0;
@@ -1904,12 +2377,12 @@
                   <div>
                     <div style="font-weight: 600;">${escapeHtml(row.svc)}</div>
                     <div style="font-size: 0.75rem; color: #64748b;">
-                      Jobs: ${row.jobs} · Avg Price: $${formatCurrency(row.avgValue)}
+                      ${escapeHtml(formatTemplate(t("service_metrics_jobs_price"), { jobs: row.jobs, price: formatCurrency(row.avgValue) }))}
                     </div>
                   </div>
                   <div style="text-align: right; font-size: 0.75rem; color: #475569;">
-                    <div>Avg Time: ${formatMinutes(row.avgDur)}</div>
-                    <div>Range: ${formatMinutes(row.minDur)} – ${formatMinutes(row.maxDur)}</div>
+                    <div>${escapeHtml(t("service_metrics_avg_time"))}: ${formatMinutes(row.avgDur)}</div>
+                    <div>${escapeHtml(t("service_metrics_range"))}: ${formatMinutes(row.minDur)} to ${formatMinutes(row.maxDur)}</div>
                   </div>
                 </div>
               `).join("")}
@@ -1917,7 +2390,7 @@
           `;
         } catch (err) {
             console.error("Error loading service metrics", err);
-            el.innerHTML = '<div class="empty-state">Unable to load service metrics</div>';
+            el.innerHTML = `<div class="empty-state">${t("service_metrics_unable")}</div>`;
           }
         }
 
@@ -1925,17 +2398,17 @@
           const container = document.getElementById("calendar-90d-content");
           if (!container) return;
           if (!featureEnabledForTier("100")) {
-            container.innerHTML = '<div class="empty-state">Upgrade to the Growth plan ($100/mo) to unlock the 90-day calendar.</div>';
+            container.innerHTML = `<div class="empty-state">${t("calendar_locked")}</div>`;
             return;
           }
-          container.innerHTML = '<div class="loading">Loading</div>';
+          container.innerHTML = `<div class="loading">${t("calendar_loading")}</div>`;
 
           try {
             const data = await fetchJson("/v1/owner/calendar/90d");
             calendar90dData = data;
             const days = Array.isArray(data?.days) ? data.days : [];
             if (!days.length) {
-              container.innerHTML = '<div class="empty-state">No appointments in the next 90 days</div>';
+              container.innerHTML = `<div class="empty-state">${t("calendar_empty")}</div>`;
               return;
             }
 
@@ -1955,7 +2428,9 @@
                   else if (maintenance > 0) classes.push("calendar-day-maintenance");
                   else if (routine > 0) classes.push("calendar-day-routine");
                   const label = typeof date === "string" ? date.slice(5) : "";
-                  const title = total === 1 ? "1 job" : `${total} jobs`;
+                  const title = total === 1
+                    ? t("calendar_jobs_single")
+                    : formatTemplate(t("calendar_jobs_plural"), { count: total });
                   return `
                     <button
                       type="button"
@@ -1983,7 +2458,7 @@
             });
           } catch (err) {
             console.error("Error loading 90-day calendar", err);
-            container.innerHTML = '<div class="empty-state">Unable to load 90-day calendar</div>';
+            container.innerHTML = `<div class="empty-state">${t("calendar_unable")}</div>`;
           }
         }
 
@@ -1996,10 +2471,10 @@
           const days = Array.isArray(calendar90dData.days) ? calendar90dData.days : [];
           const day = days.find((d) => d.date === dateStr);
 
-          titleEl.textContent = `Schedule report for ${dateStr}`;
+          titleEl.textContent = `${t("calendar_modal_title_prefix")} ${dateStr}`;
 
           if (!day) {
-            body.innerHTML = '<div class="empty-state">No appointments scheduled for this day</div>';
+            body.innerHTML = `<div class="empty-state">${t("calendar_modal_empty")}</div>`;
           } else {
             const tags = day.tag_counts || {};
             const services = day.service_type_counts || {};
@@ -2035,35 +2510,35 @@
               .join("");
 
             const overviewLine = (() => {
-              const base = `Total jobs: ${escapeHtml(total)} | New customers: ${escapeHtml(newCustomers)} | Estimated value: $${formatCurrency(estTotal)}`;
+              const base = `${t("calendar_modal_total_jobs")}: ${escapeHtml(total)} | ${t("calendar_modal_new_customers")}: ${escapeHtml(newCustomers)} | ${t("calendar_modal_est_value")}: $${formatCurrency(estTotal)}`;
               if (estAvg !== null && estAvg !== undefined && !isNaN(estAvg)) {
-                return `${base} (avg $${formatCurrency(estAvg)})`;
+                return `${base} (${t("calendar_modal_avg_label")}: $${formatCurrency(estAvg)})`;
               }
               return base;
             })();
 
             body.innerHTML = `
               <div style="margin-bottom: 0.75rem;">
-                <div style="font-weight: 600; margin-bottom: 0.25rem;">Overview</div>
+                <div style="font-weight: 600; margin-bottom: 0.25rem;">${escapeHtml(t("calendar_modal_overview"))}</div>
                 <div style="font-size: 0.8rem; color: #4b5563;">
                   ${overviewLine}
                 </div>
               </div>
               <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 1rem;">
                 <div>
-                  <div style="font-weight: 600; font-size: 0.8rem; margin-bottom: 0.25rem;">By tag</div>
+                  <div style="font-weight: 600; font-size: 0.8rem; margin-bottom: 0.25rem;">${escapeHtml(t("calendar_modal_by_tag"))}</div>
                   ${
                     tagRows
                       ? `<table style="width: 100%; font-size: 0.8rem;">${tagRows}</table>`
-                      : '<div class="empty-state" style="padding: 0.5rem 0; font-size: 0.8rem;">No tag data</div>'
+                      : `<div class="empty-state" style="padding: 0.5rem 0; font-size: 0.8rem;">${escapeHtml(t("calendar_modal_no_tag"))}</div>`
                   }
                 </div>
                 <div>
-                  <div style="font-weight: 600; font-size: 0.8rem; margin-bottom: 0.25rem;">By service type</div>
+                  <div style="font-weight: 600; font-size: 0.8rem; margin-bottom: 0.25rem;">${escapeHtml(t("calendar_modal_by_service"))}</div>
                   ${
                     svcRows
                       ? `<table style="width: 100%; font-size: 0.8rem;">${svcRows}</table>`
-                      : '<div class="empty-state" style="padding: 0.5rem 0; font-size: 0.8rem;">No service-type data</div>'
+                      : `<div class="empty-state" style="padding: 0.5rem 0; font-size: 0.8rem;">${escapeHtml(t("calendar_modal_no_service"))}</div>`
                   }
                 </div>
               </div>
@@ -2112,7 +2587,7 @@
         const listEl = document.getElementById("conversations-list");
         const detailEl = document.getElementById("conversation-detail");
         if (!listEl) return;
-        listEl.innerHTML = '<div class="loading">Loading</div>';
+        listEl.innerHTML = `<div class="loading">${t("conversations_loading")}</div>`;
         if (detailEl) detailEl.innerHTML = "";
 
         try {
@@ -2120,14 +2595,14 @@
           const items = Array.isArray(data?.items) ? data.items : [];
 
           if (!items.length) {
-            listEl.innerHTML = '<div class="empty-state">No flagged or emergency conversations</div>';
+            listEl.innerHTML = `<div class="empty-state">${t("conversations_empty")}</div>`;
             return;
           }
 
           listEl.innerHTML = items.map(conv => `
             <div class="metric-row" data-conversation-id="${escapeHtml(conv.id)}">
               <div>
-                <div style="font-weight: 600;">${escapeHtml(conv.customer_name || "Unknown customer")}</div>
+                <div style="font-weight: 600;">${escapeHtml(conv.customer_name || t("conversations_unknown_customer"))}</div>
                 <div style="font-size: 0.75rem; color: #64748b;">
                   ${escapeHtml(String(conv.channel || "").toUpperCase())}
                 </div>
@@ -2146,16 +2621,16 @@
               if (!conv) return;
               const created = conv.created_at ? new Date(conv.created_at) : null;
               const createdLabel = created && !isNaN(created.getTime())
-                ? created.toLocaleString()
+                ? created.toLocaleString(locale || undefined)
                 : "";
               detailEl.innerHTML = `
                 <div style="padding-top: 1rem; border-top: 1px solid #f1f5f9;">
-                  <div style="font-weight: 600; margin-bottom: 0.25rem;">${escapeHtml(conv.customer_name || "Unknown customer")}</div>
+                  <div style="font-weight: 600; margin-bottom: 0.25rem;">${escapeHtml(conv.customer_name || t("conversations_unknown_customer"))}</div>
                   <div style="font-size: 0.75rem; color: #64748b; margin-bottom: 0.25rem;">
-                    Channel: ${escapeHtml(conv.channel || "")}
+                    ${escapeHtml(t("conversations_channel"))}: ${escapeHtml(conv.channel || "")}
                   </div>
                   <div style="font-size: 0.75rem; color: #94a3b8; margin-bottom: 0.5rem;">
-                    Created: ${escapeHtml(createdLabel)}
+                    ${escapeHtml(t("conversations_created"))}: ${escapeHtml(createdLabel)}
                   </div>
                   <div style="font-size: 0.875rem; color: #4b5563;">${escapeHtml(conv.outcome || "")}</div>
                 </div>
@@ -2163,14 +2638,14 @@
             });
           });
         } catch (err) {
-          listEl.innerHTML = '<div class="empty-state">Unable to load conversations</div>';
+          listEl.innerHTML = `<div class="empty-state">${t("conversations_unable")}</div>`;
           if (detailEl) detailEl.innerHTML = "";
         }
       }
 
       function appendAssistantMessage(role, text) {
         const container = document.getElementById("owner-assistant-messages");
-        if (!container) return;
+        if (!container) return null;
         const div = document.createElement("div");
         div.className = "assistant-message";
         if (role === "user") {
@@ -2183,6 +2658,7 @@
         div.textContent = text;
         container.appendChild(div);
         container.scrollTop = container.scrollHeight;
+        return div;
       }
 
       async function askOwnerAssistant(question) {
@@ -2191,32 +2667,90 @@
         if (ownerAssistantBusy) return null;
         if (!featureEnabledForTier("100")) {
           if (statusEl) {
-            statusEl.textContent = "The owner assistant is a Growth/Scale feature; responses may be limited in Starter.";
+            statusEl.textContent = t("assistant_limited");
           }
         }
         ownerAssistantBusy = true;
-        if (statusEl) statusEl.textContent = "Thinking...";
+        if (statusEl) statusEl.textContent = t("assistant_thinking");
 
+        let assistantDiv = appendAssistantMessage("assistant", "");
         try {
-          const res = await fetch(`${backendBase}/v1/owner/assistant/query`, {
+          const res = await fetch(`${backendBase}/v1/chat/stream`, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
+              Accept: "text/event-stream",
               ...authHeaders(),
             },
-            body: JSON.stringify({ question }),
+            body: JSON.stringify({
+              text: question,
+              conversation_id: ownerAssistantConversationId,
+            }),
           });
-          if (!res.ok) {
+          if (!res.ok || !res.body) {
             const msg = `Error ${res.status}`;
             if (statusEl) statusEl.textContent = msg;
             return null;
           }
-          const data = await res.json();
+
+          const reader = res.body.getReader();
+          const decoder = new TextDecoder();
+          let buffer = "";
+
+          function handleEventBlock(block) {
+            let event = "message";
+            const dataLines = [];
+            for (const line of block.split("\n")) {
+              if (line.startsWith("event:")) {
+                event = line.slice(6).trim();
+              } else if (line.startsWith("data:")) {
+                dataLines.push(line.slice(5).trim());
+              }
+            }
+            const data = dataLines.join("\n");
+            if (event === "meta") {
+              try {
+                const meta = JSON.parse(data);
+                if (meta.conversation_id) {
+                  ownerAssistantConversationId = meta.conversation_id;
+                }
+              } catch (e) {
+                // ignore parse errors
+              }
+              return false;
+            }
+            if (event === "done") {
+              return true;
+            }
+            if (assistantDiv && data) {
+              const spacer = assistantDiv.textContent ? " " : "";
+              assistantDiv.textContent = `${assistantDiv.textContent || ""}${spacer}${data}`;
+            }
+            return false;
+          }
+
+          let done = false;
+          while (!done) {
+            const { value, done: readerDone } = await reader.read();
+            if (readerDone) break;
+            buffer += decoder.decode(value, { stream: true });
+            let idx;
+            while ((idx = buffer.indexOf("\n\n")) !== -1) {
+              const block = buffer.slice(0, idx);
+              buffer = buffer.slice(idx + 2);
+              const stop = handleEventBlock(block);
+              if (stop) {
+                done = true;
+                break;
+              }
+            }
+          }
           if (statusEl) statusEl.textContent = "";
-          return data;
+          return true;
         } catch (err) {
           console.error("Error calling owner assistant", err);
-          if (statusEl) statusEl.textContent = "Unable to reach assistant";
+          if (statusEl) statusEl.textContent = t("assistant_unreachable");
+          if (assistantDiv) assistantDiv.textContent = t("assistant_unavailable");
           return null;
         } finally {
           ownerAssistantBusy = false;
@@ -2251,7 +2785,7 @@
           if (!isGrowthOrHigher) {
             const status = document.getElementById("owner-assistant-status");
             if (status) {
-              status.textContent = "The owner assistant is optimized for Growth and Scale plans; you can still try it in this proof of concept.";
+              status.textContent = t("assistant_poc_notice");
               status.className = "assistant-status";
             }
           }
@@ -2268,12 +2802,7 @@
           if (!question) return;
           appendAssistantMessage("user", question);
           input.value = "";
-          const data = await askOwnerAssistant(question);
-          const answer =
-            data && typeof data.answer === "string"
-              ? data.answer
-              : "I was not able to generate an answer. Please try again.";
-          appendAssistantMessage("assistant", answer);
+          await askOwnerAssistant(question);
         });
       }
 
@@ -2284,7 +2813,7 @@
           const labelEl = document.getElementById("owner-plan-label");
           if (labelEl) {
             const label = tierCodeToLabel(ownerServiceTier);
-            labelEl.textContent = `Plan: ${label}`;
+            labelEl.textContent = formatTemplate(t("plan_label"), { plan: label });
             labelEl.style.display = "inline-flex";
           }
           renderIntegrationStatuses(data?.integrations || []);
@@ -2297,6 +2826,9 @@
       function initAuth() {
         const apiInput = document.getElementById("owner-api-key-input");
         const tokenInput = document.getElementById("owner-token-input");
+        const businessInput = document.getElementById("business-id-input");
+        const businessApply = document.getElementById("business-apply");
+        const businessClear = document.getElementById("business-clear");
         const statusEl = document.getElementById("owner-auth-status");
 
         if (apiInput) {
@@ -2306,16 +2838,51 @@
             if (apiKey) {
               localStorage.setItem("owner_api_key", apiKey);
               if (statusEl) {
-                statusEl.textContent = "API key saved";
+                statusEl.textContent = t("api_key_saved");
                 statusEl.className = "success";
               }
             } else {
               localStorage.removeItem("owner_api_key");
               if (statusEl) {
-                statusEl.textContent = "API key cleared";
+                statusEl.textContent = t("api_key_cleared");
                 statusEl.className = "muted";
               }
             }
+          });
+        }
+
+        function persistBusinessId(nextId) {
+          businessId = (nextId || "").trim();
+          if (businessInput) businessInput.value = businessId;
+          if (businessId) {
+            localStorage.setItem("owner_business_id", businessId);
+            if (statusEl) {
+              statusEl.textContent = formatTemplate(t("business_set"), { id: businessId });
+              statusEl.className = "success";
+            }
+          } else {
+            localStorage.removeItem("owner_business_id");
+            if (statusEl) {
+              statusEl.textContent = t("business_cleared");
+              statusEl.className = "muted";
+            }
+          }
+        }
+
+        if (businessInput) {
+          if (businessId) businessInput.value = businessId;
+          businessInput.addEventListener("change", (e) => {
+            persistBusinessId(e.target.value);
+          });
+        }
+        if (businessApply) {
+          businessApply.addEventListener("click", () => {
+            persistBusinessId(businessInput ? businessInput.value : businessId);
+          });
+        }
+        if (businessClear) {
+          businessClear.addEventListener("click", () => {
+            persistBusinessId("");
           });
         }
 
@@ -2326,18 +2893,25 @@
             if (ownerToken) {
               localStorage.setItem("owner_owner_token", ownerToken);
               if (statusEl) {
-                statusEl.textContent = "Owner token saved";
+                statusEl.textContent = t("owner_token_saved");
                 statusEl.className = "success";
               }
             } else {
               localStorage.removeItem("owner_owner_token");
               if (statusEl) {
-                statusEl.textContent = "Owner token cleared";
+                statusEl.textContent = t("owner_token_cleared");
                 statusEl.className = "muted";
               }
             }
           });
         }
+      }
+
+      function setThemeToggleLabel() {
+        const themeToggle = document.getElementById("theme-toggle");
+        if (!themeToggle) return;
+        const isDark = document.body.classList.contains("dark");
+        themeToggle.textContent = isDark ? t("theme_light") : t("theme_dark");
       }
 
       function initThemeToggle() {
@@ -2347,15 +2921,11 @@
           document.body.classList.add("dark");
         }
         if (themeToggle) {
-          const refreshLabel = () => {
-            const isDark = document.body.classList.contains("dark");
-            themeToggle.textContent = isDark ? "Light Mode" : "Dark Mode";
-          };
-          refreshLabel();
+          setThemeToggleLabel();
           themeToggle.addEventListener("click", () => {
             const isDark = document.body.classList.toggle("dark");
             localStorage.setItem("owner_theme", isDark ? "dark" : "light");
-            refreshLabel();
+            setThemeToggleLabel();
           });
         }
       }
@@ -2377,16 +2947,7 @@
         });
 
         document.getElementById("refresh-all")?.addEventListener("click", () => {
-          loadOwnerKpis();
-          loadTodaySummary();
-          loadSchedule();
-          loadEmergencyJobs();
-          loadAnalytics();
-          loadZipWealth();
-          loadCalendar90d();
-          loadServiceMetrics();
-          loadGeoMarkers();
-          loadConversations();
+          refreshAllData();
         });
 
         document.getElementById("open-assistant-cta")?.addEventListener("click", () => {
@@ -2436,6 +2997,8 @@
       }
 
       window.addEventListener("DOMContentLoaded", () => {
+        initLocale();
+        applyLocale();
         updateConnectionStatus("connecting");
         initAuth();
         initThemeToggle();
@@ -2444,16 +3007,7 @@
         initCalendarModal();
         initOwnerAssistant();
         loadOwnerOnboardingProfile();
-        loadOwnerKpis();
-        loadTodaySummary();
-        loadSchedule();
-        loadEmergencyJobs();
-        loadAnalytics();
-        loadZipWealth();
-        loadCalendar90d();
-        loadServiceMetrics();
-        loadGeoMarkers();
-        loadConversations();
+        refreshAllData();
       });
     </script>
   </body>

@@ -44,9 +44,13 @@ def register(
     email: EmailStr,
     password: str,
     name: Optional[str] = None,
+    role: str = "owner",
     business_id: str = Depends(ensure_business_active),
 ) -> UserResponse:
     """Create a user, associate to business, and set active business."""
+    allowed_roles = {"owner", "admin", "staff", "viewer"}
+    if role not in allowed_roles:
+        raise HTTPException(status_code=400, detail="Invalid role")
     session = _require_db()
     try:
         existing = (
@@ -68,7 +72,7 @@ def register(
             id=secrets.token_hex(8),
             business_id=business_id,
             user_id=user_id,
-            role="owner",
+            role=role,
         )  # type: ignore[call-arg]
         session.add(bu)
         session.commit()
@@ -79,7 +83,7 @@ def register(
             email=user.email,  # type: ignore[arg-type]
             name=user.name,
             active_business_id=user.active_business_id,
-            roles=["owner"],
+            roles=[role],
         )
     finally:
         session.close()

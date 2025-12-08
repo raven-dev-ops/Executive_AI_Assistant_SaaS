@@ -9,11 +9,13 @@ from fastapi import APIRouter, Depends, Query, Response
 
 from ..db import SQLALCHEMY_AVAILABLE, SessionLocal
 from ..db_models import BusinessDB
-from ..deps import ensure_business_active, require_owner_dashboard_auth
+from ..deps import ensure_business_active, require_dashboard_role
 from ..repositories import appointments_repo, conversations_repo, customers_repo
 
 
-router = APIRouter(dependencies=[Depends(require_owner_dashboard_auth)])
+router = APIRouter(
+    dependencies=[Depends(require_dashboard_role(["admin", "owner", "staff", "viewer"]))]
+)
 
 
 @router.get("/service-mix.csv", response_class=Response)

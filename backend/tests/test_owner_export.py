@@ -308,3 +308,50 @@ def test_owner_export_pipeline_csv_reflects_job_stages_and_values():
     assert "phone:referral" in lead_sources
     emergency_flags = {row[7] for row in rows}
     assert "true" in emergency_flags
+
+
+def test_owner_export_full_json_includes_business_meta():
+    appointments_repo._by_id.clear()
+    appointments_repo._by_customer.clear()
+    appointments_repo._by_business.clear()
+    customers_repo._by_id.clear()
+    customers_repo._by_phone.clear()
+    customers_repo._by_business.clear()
+    if hasattr(conversations_repo, "_by_id"):
+        conversations_repo._by_id.clear()
+        conversations_repo._by_session.clear()
+        conversations_repo._by_business.clear()
+
+    # Seed a basic customer + appointment to populate the export lists.
+    cust_resp = client.post(
+        "/v1/crm/customers",
+        json={"name": "Full Export", "phone": "555-7777", "email": "full@example.com"},
+    )
+    customer_id = cust_resp.json()["id"]
+    now = datetime.now(UTC)
+    start = now - timedelta(days=1)
+    end = start + timedelta(hours=1)
+    client.post(
+        "/v1/crm/appointments",
+        json={
+            "customer_id": customer_id,
+            "start_time": start.isoformat(),
+            "end_time": end.isoformat(),
+            "service_type": "Full Export Service",
+            "is_emergency": False,
+            "description": "Full export check",
+        },
+    )
+    conversations_repo.create(
+        channel="sms",
+        customer_id=customer_id,
+        business_id="default_business",
+    )
+
+    resp = client.get("/v1/owner/export/full.json")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["business"]["id"] == "default_business"
+    assert body["customers"]
+    assert body["appointments"]
+    assert body["conversations"]

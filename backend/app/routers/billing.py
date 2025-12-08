@@ -13,6 +13,12 @@ from ..deps import ensure_business_active, require_owner_dashboard_auth
 from ..db import SQLALCHEMY_AVAILABLE, SessionLocal
 from ..db_models import BusinessDB
 from ..metrics import metrics
+from ..services.stripe_webhook import (
+    StripeReplayError,
+    StripeSignatureError,
+    check_replay,
+    verify_stripe_signature,
+)
 
 
 router = APIRouter(dependencies=[Depends(require_owner_dashboard_auth)])
@@ -138,29 +144,70 @@ def create_checkout_session(
 @router.post("/webhook")
 async def billing_webhook(
     request: Request,
-    stripe_signature: str | None = Header(default=None, convert_underscores=False),
+    stripe_signature: str | None = Header(
+        default=None, alias="Stripe-Signature", convert_underscores=False
+    ),
 ):
-    """Handle Stripe webhook events (lightweight, no signature verification in stub)."""
+    """Handle Stripe webhook events with signature verification and replay protection."""
+    raw_body = await request.body()
+    settings = get_settings().stripe
+    event_type = ""
+    event_id = ""
+    business_id = "default_business"
     try:
-        payload = await request.json()
-    except Exception as exc:  # pragma: no cover - defensive log path
-        metrics.billing_webhook_failures += 1
-        logger.exception("billing_webhook_invalid_payload", extra={"error": str(exc)})
-        raise HTTPException(status_code=400, detail="Invalid payload")
+        if settings.verify_signatures and not settings.use_stub:
+            if not stripe_signature:
+                raise HTTPException(
+                    status_code=400, detail="Missing Stripe-Signature header"
+                )
+            if not settings.webhook_secret:
+                raise HTTPException(
+                    status_code=503, detail="Stripe webhook secret not configured"
+                )
+            try:
+                verify_stripe_signature(
+                    raw_body, stripe_signature, settings.webhook_secret
+                )
+            except (StripeSignatureError, StripeReplayError) as exc:
+                logger.warning(
+                    "billing_webhook_signature_invalid",
+                    extra={"error": str(exc)},
+                )
+                raise HTTPException(
+                    status_code=400, detail="Invalid webhook signature"
+                ) from exc
 
-    event_type = payload.get("type", "")
-    data_obj = payload.get("data", {}).get("object", {})
-    business_id = data_obj.get("metadata", {}).get("business_id") or "default_business"
-    customer_id = data_obj.get("customer")
-    subscription_id = data_obj.get("subscription") or data_obj.get("id")
-    period_end = data_obj.get("current_period_end")
-    current_period_end = (
-        datetime.fromtimestamp(period_end, UTC)
-        if isinstance(period_end, (int, float))
-        else None
-    )
+        try:
+            payload = await request.json()
+        except Exception as exc:  # pragma: no cover - defensive log path
+            logger.exception(
+                "billing_webhook_invalid_payload", extra={"error": str(exc)}
+            )
+            raise HTTPException(status_code=400, detail="Invalid payload") from exc
 
-    try:
+        event_type = payload.get("type", "")
+        event_id = payload.get("id", "")
+        data_obj = payload.get("data", {}).get("object", {})
+        business_id = (
+            data_obj.get("metadata", {}).get("business_id") or "default_business"
+        )
+        customer_id = data_obj.get("customer")
+        subscription_id = data_obj.get("subscription") or data_obj.get("id")
+        period_end = data_obj.get("current_period_end")
+        current_period_end = (
+            datetime.fromtimestamp(period_end, UTC)
+            if isinstance(period_end, (int, float))
+            else None
+        )
+
+        if (
+            settings.verify_signatures
+            and not settings.use_stub
+            and event_id
+            and settings.replay_protection_seconds > 0
+        ):
+            check_replay(event_id, settings.replay_protection_seconds)
+
         if event_type == "checkout.session.completed":
             _update_subscription(
                 business_id,
@@ -206,11 +253,27 @@ async def billing_webhook(
         else:
             # Ignore other events
             return {"received": True}
+    except StripeReplayError as exc:
+        metrics.billing_webhook_failures += 1
+        logger.warning(
+            "billing_webhook_replay_blocked",
+            extra={
+                "business_id": business_id,
+                "event_id": event_id,
+                "event_type": event_type,
+                "error": str(exc),
+            },
+        )
+        raise HTTPException(status_code=400, detail="Duplicate webhook event")
     except HTTPException:
         metrics.billing_webhook_failures += 1
         logger.warning(
             "billing_webhook_http_error",
-            extra={"business_id": business_id, "event_type": event_type},
+            extra={
+                "business_id": business_id,
+                "event_id": event_id,
+                "event_type": event_type,
+            },
         )
         raise
     except Exception as exc:  # pragma: no cover - unexpected failures should be visible
@@ -219,6 +282,7 @@ async def billing_webhook(
             "billing_webhook_failure",
             extra={
                 "business_id": business_id,
+                "event_id": event_id,
                 "event_type": event_type,
                 "error": str(exc),
             },

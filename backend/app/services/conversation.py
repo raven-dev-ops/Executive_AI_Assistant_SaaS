@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 import logging
+import time
 
 from .calendar import TimeSlot, calendar_service
 from .stt_tts import speech_service  # noqa: F401  (re-exported for voice router)
@@ -246,6 +247,33 @@ class ConversationManager:
     """Simple state-machine-based conversation manager for Phase 1."""
 
     async def handle_input(
+        self, session: CallSession, text: str | None
+    ) -> ConversationResult:
+        start = time.perf_counter()
+        success = False
+        try:
+            result = await self._handle_input_impl(session, text)
+            success = True
+            return result
+        finally:
+            elapsed_ms = (time.perf_counter() - start) * 1000.0
+            metrics.record_conversation_latency(elapsed_ms)
+            business_id = getattr(session, "business_id", "default_business") or "default_business"
+            if success:
+                metrics.conversation_messages += 1
+            else:
+                metrics.conversation_failures += 1
+            if elapsed_ms > 1800:
+                logger.warning(
+                    "conversation_latency_slow",
+                    extra={
+                        "business_id": business_id,
+                        "session_id": session.id,
+                        "latency_ms": round(elapsed_ms, 2),
+                    },
+                )
+
+    async def _handle_input_impl(
         self, session: CallSession, text: str | None
     ) -> ConversationResult:
         session.updated_at = datetime.now(UTC)

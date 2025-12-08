@@ -1,4 +1,4 @@
-const CACHE_NAME = "chat-pwa-cache-v1";
+const CACHE_NAME = "chat-pwa-cache-v2";
 const OFFLINE_URL = "/chat/index.html";
 const ASSETS = [
   "/chat/",
@@ -11,6 +11,7 @@ const ASSETS = [
 
 const DB_NAME = "chat-sync";
 const STORE_NAME = "queue";
+let retryTimer = null;
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -50,6 +51,8 @@ self.addEventListener("message", (event) => {
     event.waitUntil(handleQueueChat(data));
   } else if (data.type === "flush-queue") {
     event.waitUntil(flushQueue());
+  } else if (data.type === "queue-snapshot-request") {
+    event.waitUntil(sendQueueSnapshot());
   }
 });
 
@@ -135,11 +138,13 @@ async function handleQueueChat(data) {
     await notifyClients("queue-error", { message: "Sync registration failed." });
   }
   await notifyClients("queue-status", { message: "Queued message for background sync." });
+  await sendQueueSnapshot();
 }
 
 async function flushQueue() {
   const items = await getQueue();
   if (!items.length) {
+    await sendQueueSnapshot();
     return;
   }
   const placeholderMap = {};
@@ -190,10 +195,12 @@ async function flushQueue() {
       await notifyClients("queue-error", {
         message: "Background sync failed; will retry when connection is back."
       });
+      scheduleRetry();
       throw err;
     }
   }
   await notifyClients("queue-status", { message: "" });
+  await sendQueueSnapshot();
 }
 
 async function notifyClients(type, payload) {
@@ -201,4 +208,39 @@ async function notifyClients(type, payload) {
   for (const client of clients) {
     client.postMessage({ type, ...payload });
   }
+}
+
+function scheduleRetry() {
+  if (retryTimer) return;
+  const jitterMs = 3000 + Math.floor(Math.random() * 7000);
+  retryTimer = setTimeout(async () => {
+    retryTimer = null;
+    try {
+      await flushQueue();
+    } catch (err) {
+      // Best effort: if still failing, let the browser reschedule sync events.
+    }
+    try {
+      if ("sync" in self.registration) {
+        await self.registration.sync.register("chat-sync");
+      }
+    } catch (err) {
+      await notifyClients("queue-error", { message: "Retry scheduling failed." });
+    }
+  }, jitterMs);
+}
+
+async function sendQueueSnapshot() {
+  const queue = await getQueue();
+  const summary = queue.map((item) => ({
+    id: item.id,
+    kind: item.kind,
+    createdAt: item.createdAt,
+    placeholderId: item.placeholderId,
+    conversationId: item.conversationId
+  }));
+  await notifyClients("queue-snapshot", {
+    queue: summary,
+    count: summary.length
+  });
 }

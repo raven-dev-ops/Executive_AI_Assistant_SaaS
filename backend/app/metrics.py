@@ -75,8 +75,25 @@ class Metrics:
     chat_latency_ms_total: float = 0.0
     chat_latency_ms_max: float = 0.0
     chat_latency_samples: int = 0
+    chat_latency_values: list[float] = field(default_factory=list)
+    chat_latency_bucket_counts: Dict[float, int] = field(default_factory=dict)
+    conversation_messages: int = 0
+    conversation_failures: int = 0
+    conversation_latency_ms_total: float = 0.0
+    conversation_latency_ms_max: float = 0.0
+    conversation_latency_samples: int = 0
+    conversation_latency_values: list[float] = field(default_factory=list)
+    conversation_latency_bucket_counts: Dict[float, int] = field(default_factory=dict)
     billing_webhook_failures: int = 0
     background_job_errors: int = 0
+    retention_purge_runs: int = 0
+    retention_appointments_deleted: int = 0
+    retention_conversations_deleted: int = 0
+    retention_messages_deleted: int = 0
+    job_queue_enqueued: int = 0
+    job_queue_completed: int = 0
+    job_queue_failed: int = 0
+    speech_circuit_trips: int = 0
     sms_by_business: Dict[str, BusinessSmsMetrics] = field(default_factory=dict)
     twilio_voice_requests: int = 0
     twilio_voice_errors: int = 0
@@ -93,6 +110,59 @@ class Metrics:
         default_factory=dict
     )
     retention_by_business: Dict[str, Dict[str, int]] = field(default_factory=dict)
+
+    def record_chat_latency(self, latency_ms: float) -> None:
+        """Track chat latency with buckets and rolling samples."""
+        self.chat_latency_ms_total += latency_ms
+        if latency_ms > self.chat_latency_ms_max:
+            self.chat_latency_ms_max = latency_ms
+        self.chat_latency_samples += 1
+
+        self.chat_latency_values.append(latency_ms)
+        # Keep a rolling window to bound memory.
+        if len(self.chat_latency_values) > 500:
+            del self.chat_latency_values[: len(self.chat_latency_values) - 500]
+
+        buckets = [100, 250, 500, 1000, 2000, 5000, 10000]
+        bucket_hit = False
+        for b in buckets:
+            if latency_ms <= b:
+                self.chat_latency_bucket_counts[b] = (
+                    self.chat_latency_bucket_counts.get(b, 0) + 1
+                )
+                bucket_hit = True
+                break
+        if not bucket_hit:
+            self.chat_latency_bucket_counts[float("inf")] = (
+                self.chat_latency_bucket_counts.get(float("inf"), 0) + 1
+            )
+
+    def record_conversation_latency(self, latency_ms: float) -> None:
+        """Track conversation latency with buckets and rolling samples."""
+        self.conversation_latency_ms_total += latency_ms
+        if latency_ms > self.conversation_latency_ms_max:
+            self.conversation_latency_ms_max = latency_ms
+        self.conversation_latency_samples += 1
+
+        self.conversation_latency_values.append(latency_ms)
+        if len(self.conversation_latency_values) > 500:
+            del self.conversation_latency_values[
+                : len(self.conversation_latency_values) - 500
+            ]
+
+        buckets = [250, 500, 1000, 2000, 4000, 8000, 12000]
+        bucket_hit = False
+        for b in buckets:
+            if latency_ms <= b:
+                self.conversation_latency_bucket_counts[b] = (
+                    self.conversation_latency_bucket_counts.get(b, 0) + 1
+                )
+                bucket_hit = True
+                break
+        if not bucket_hit:
+            self.conversation_latency_bucket_counts[float("inf")] = (
+                self.conversation_latency_bucket_counts.get(float("inf"), 0) + 1
+            )
 
     def as_dict(self) -> Dict[str, Any]:
         return {
@@ -115,8 +185,26 @@ class Metrics:
             "chat_latency_ms_total": self.chat_latency_ms_total,
             "chat_latency_ms_max": self.chat_latency_ms_max,
             "chat_latency_samples": self.chat_latency_samples,
+            "chat_latency_bucket_counts": {
+                str(k): v for k, v in self.chat_latency_bucket_counts.items()
+            },
+            "conversation_messages": self.conversation_messages,
+            "conversation_failures": self.conversation_failures,
+            "conversation_latency_ms_total": self.conversation_latency_ms_total,
+            "conversation_latency_ms_max": self.conversation_latency_ms_max,
+            "conversation_latency_samples": self.conversation_latency_samples,
+            "conversation_latency_bucket_counts": {
+                str(k): v for k, v in self.conversation_latency_bucket_counts.items()
+            },
+            "job_queue_enqueued": self.job_queue_enqueued,
+            "job_queue_completed": self.job_queue_completed,
+            "job_queue_failed": self.job_queue_failed,
             "billing_webhook_failures": self.billing_webhook_failures,
             "background_job_errors": self.background_job_errors,
+            "retention_purge_runs": self.retention_purge_runs,
+            "retention_appointments_deleted": self.retention_appointments_deleted,
+            "retention_conversations_deleted": self.retention_conversations_deleted,
+            "retention_messages_deleted": self.retention_messages_deleted,
             "sms_by_business": {
                 business_id: {
                     "sms_sent_total": m.sms_sent_total,

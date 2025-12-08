@@ -4,6 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#22c55e" />
+    <meta name="description" content="Installable offline-ready chat assistant for AI Telephony Service & CRM" />
     <title>AI Chat (PWA)</title>
     <link rel="manifest" href="/chat/app.webmanifest" />
     <link rel="icon" href="/chat/icons/icon-192.png" sizes="192x192" />
@@ -142,6 +143,30 @@
       button:not(:disabled):hover {
         transform: translateY(-1px);
       }
+      .offline-banner {
+        padding: 0.6rem 1.25rem;
+        background: linear-gradient(90deg, rgba(249, 115, 22, 0.15), rgba(251, 191, 36, 0.15));
+        color: #fed7aa;
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 0.5rem;
+        align-items: center;
+        border-bottom: 1px solid var(--border);
+      }
+      .offline-banner.hidden {
+        display: none;
+      }
+      .offline-banner .meta {
+        display: flex;
+        gap: 0.75rem;
+        flex-wrap: wrap;
+        font-size: 0.9rem;
+      }
+      .offline-banner button {
+        background: rgba(255, 255, 255, 0.12);
+        color: #fff7ed;
+        border: 1px solid rgba(255, 255, 255, 0.18);
+      }
       .status-bar {
         padding: 0.6rem 1.25rem;
         border-bottom: 1px solid var(--border);
@@ -157,6 +182,53 @@
       }
       .status-bar .emoji {
         font-size: 1.1rem;
+      }
+      .history-panel {
+        background: rgba(255, 255, 255, 0.04);
+        border-bottom: 1px solid var(--border);
+        padding: 0.75rem 1.25rem;
+        display: grid;
+        gap: 0.5rem;
+      }
+      .history-panel.hidden {
+        display: none;
+      }
+      .history-header {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        flex-wrap: wrap;
+        color: var(--muted);
+        font-size: 0.9rem;
+      }
+      .history-list {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: grid;
+        gap: 0.35rem;
+      }
+      .history-item {
+        display: flex;
+        justify-content: space-between;
+        gap: 0.75rem;
+        font-size: 0.9rem;
+        padding: 0.4rem 0.55rem;
+        border-radius: 10px;
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid var(--border);
+      }
+      .history-item .ts {
+        color: var(--muted);
+        font-variant-numeric: tabular-nums;
+      }
+      .queue-pill {
+        padding: 0.15rem 0.55rem;
+        border-radius: 999px;
+        background: rgba(34, 197, 94, 0.12);
+        border: 1px solid var(--border);
+        color: #bbf7d0;
+        font-size: 0.85rem;
       }
       main {
         position: relative;
@@ -318,11 +390,34 @@
         <div class="actions">
           <button class="ghost small" id="install-btn" type="button">Install app</button>
           <button class="ghost small" id="reset-btn" type="button">Reset chat</button>
+          <button class="ghost small" id="queue-btn" type="button">Queue & status</button>
         </div>
       </header>
+      <div id="offline-banner" class="offline-banner hidden" role="status" aria-live="polite">
+        <div class="meta">
+          <strong>Offline mode</strong>
+          <span id="offline-meta">Messages will queue and send when back online.</span>
+        </div>
+        <div>
+          <button id="resync-btn" type="button">Retry sync</button>
+        </div>
+      </div>
       <div id="status-bar" class="status-bar hidden">
         <span class="emoji">📡</span>
         <span id="status-text">Offline. Messages will queue.</span>
+      </div>
+      <div id="history-panel" class="history-panel hidden">
+        <div class="history-header">
+          <span>Sync history</span>
+          <span id="queue-count" class="queue-pill">Queue: 0</span>
+          <button class="ghost small" id="refresh-queue-btn" type="button">Refresh</button>
+        </div>
+        <div class="history-header" style="justify-content: space-between;">
+          <span>Queued messages</span>
+          <span id="queue-aged" class="queue-pill" aria-live="polite"></span>
+        </div>
+        <ul id="queue-details" class="history-list" aria-live="polite"></ul>
+        <ul id="history-list" class="history-list" aria-live="polite"></ul>
       </div>
       <main>
         <div id="chat-log" class="chat-log" role="log" aria-live="polite"></div>
@@ -368,6 +463,16 @@
       const tenantLabel = document.getElementById("tenant-label");
       const statusBar = document.getElementById("status-bar");
       const statusText = document.getElementById("status-text");
+      const offlineBanner = document.getElementById("offline-banner");
+      const offlineMeta = document.getElementById("offline-meta");
+      const historyPanel = document.getElementById("history-panel");
+      const historyList = document.getElementById("history-list");
+      const queueCount = document.getElementById("queue-count");
+      const queueDetails = document.getElementById("queue-details");
+      const queueAged = document.getElementById("queue-aged");
+      const queueBtn = document.getElementById("queue-btn");
+      const refreshQueueBtn = document.getElementById("refresh-queue-btn");
+      const resyncBtn = document.getElementById("resync-btn");
       const sendBtn = document.getElementById("send-btn");
       const chatInput = document.getElementById("chat-input");
       const apiKeyInput = document.getElementById("api-key-input");
@@ -382,8 +487,10 @@
       let conversationId = localStorage.getItem("chat_conversation_id");
       let queuedStart = false;
       let deferredPrompt = null;
+      let lastQueueCount = 0;
 
       const pendingMessages = new Map(); // clientMessageId -> element
+      const statusHistory = [];
       installBtn.disabled = true;
 
       function resolveBackend() {
@@ -396,16 +503,64 @@
         return DEFAULT_BACKEND;
       }
 
+      function pushHistory(message, tone = "info") {
+        const entry = { message, tone, ts: new Date() };
+        statusHistory.unshift(entry);
+        statusHistory.splice(10);
+        renderHistory();
+      }
+
+      function renderHistory() {
+        historyList.innerHTML = "";
+        statusHistory.forEach((item) => {
+          const li = document.createElement("li");
+          li.className = "history-item";
+          const time = item.ts.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+          li.innerHTML = `<span>${item.message}</span><span class="ts">${time}</span>`;
+          historyList.appendChild(li);
+        });
+      }
+
+      function setQueueCount(count) {
+        queueCount.textContent = `Queue: ${count}`;
+      }
+
+      function renderQueueDetails(items) {
+        queueDetails.innerHTML = "";
+        if (!items || !items.length) {
+          queueDetails.innerHTML = '<li class="history-item"><span>No queued messages</span><span class="ts">—</span></li>';
+          queueAged.textContent = "";
+          return;
+        }
+        const now = Date.now();
+        items.forEach((item) => {
+          const ageMs = now - item.createdAt;
+          const ageSec = Math.max(1, Math.round(ageMs / 1000));
+          const li = document.createElement("li");
+          li.className = "history-item";
+          li.innerHTML = `<span>${item.kind || "message"} (${item.placeholderId || "pending"})</span><span class="ts">${ageSec}s ago</span>`;
+          queueDetails.appendChild(li);
+        });
+        const oldest = Math.min(...items.map((i) => i.createdAt || now));
+        const ageMs = now - oldest;
+        const ageSec = Math.max(1, Math.round(ageMs / 1000));
+        queueAged.textContent = `Oldest queued: ${ageSec}s`;
+      }
+
       function updateConnectionUI() {
         const online = navigator.onLine;
         connectionChip.classList.toggle("online", online);
         connectionChip.classList.toggle("offline", !online);
         connectionText.textContent = online ? "Online" : "Offline";
+        offlineBanner.classList.toggle("hidden", online);
         statusBar.classList.toggle("hidden", online);
         if (!online) {
           statusText.textContent = "Offline. Messages will queue and send when back online.";
+          offlineMeta.textContent = "Messages will queue; we will retry with jittered backoff.";
+          pushHistory("Went offline – queueing enabled", "warn");
         } else {
           postToServiceWorker({ type: "flush-queue" });
+          pushHistory("Back online – flushing queue", "info");
         }
       }
 
@@ -508,12 +663,17 @@
           payload: {},
         });
         appendMessage("assistant", "We will start your session once you're back online.", "queued");
+        pushHistory("Chat start queued for offline session", "info");
       }
 
       function postToServiceWorker(payload) {
         if (navigator.serviceWorker.controller) {
           navigator.serviceWorker.controller.postMessage(payload);
         }
+      }
+
+      function requestQueueSnapshot() {
+        postToServiceWorker({ type: "queue-snapshot-request" });
       }
 
       async function sendMessageOnline(text, clientMessageId) {
@@ -552,6 +712,7 @@
           });
           statusText.textContent = "Queued message. It will send when connection resumes.";
           statusBar.classList.remove("hidden");
+          pushHistory("Message queued (offline)", "info");
           return;
         }
 
@@ -561,6 +722,7 @@
           updatePendingMessage(clientMessageId, "Failed to send");
           statusText.textContent = "Send failed. Try again or check your network.";
           statusBar.classList.remove("hidden");
+          pushHistory("Send failed; will retry on next attempt", "warn");
         }
       }
 
@@ -588,9 +750,20 @@
         } else if (data.type === "queue-error") {
           statusText.textContent = data.message || "Background sync failed.";
           statusBar.classList.remove("hidden");
+          pushHistory(statusText.textContent, "warn");
         } else if (data.type === "queue-status") {
           statusText.textContent = data.message;
           statusBar.classList.toggle("hidden", !data.message);
+          if (data.message) pushHistory(data.message, "info");
+        } else if (data.type === "queue-snapshot") {
+          const count = data.count || 0;
+          setQueueCount(count);
+          if (count !== lastQueueCount) {
+            pushHistory(`Queue size: ${count}`, "info");
+            lastQueueCount = count;
+          }
+          renderQueueDetails(data.queue || []);
+          renderHistory();
         }
       }
 
@@ -659,6 +832,7 @@
           statusBar.classList.remove("hidden");
         }
         setupInstallPrompt();
+        requestQueueSnapshot();
       }
 
       sendBtn.addEventListener("click", handleSend);
@@ -670,6 +844,18 @@
       });
       saveAuthBtn.addEventListener("click", saveTokens);
       resetBtn.addEventListener("click", resetChat);
+      queueBtn.addEventListener("click", () => {
+        historyPanel.classList.toggle("hidden");
+        if (!historyPanel.classList.contains("hidden")) {
+          requestQueueSnapshot();
+        }
+      });
+      refreshQueueBtn.addEventListener("click", requestQueueSnapshot);
+      resyncBtn.addEventListener("click", () => {
+        pushHistory("Manual sync requested", "info");
+        postToServiceWorker({ type: "flush-queue" });
+        requestQueueSnapshot();
+      });
 
       init();
     </script>

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends
@@ -11,6 +12,7 @@ from ..metrics import BusinessSmsMetrics, metrics
 from ..repositories import appointments_repo, customers_repo
 from ..services import conversation
 from ..services.sms import sms_service
+from ..services.job_queue import job_queue
 
 
 router = APIRouter()
@@ -19,63 +21,72 @@ router = APIRouter()
 @router.post("/send-upcoming")
 async def send_upcoming_reminders(
     hours_ahead: int = 24,
+    background: bool = False,
     business_id: str = Depends(ensure_business_active),
 ) -> dict:
     """Send SMS reminders for upcoming appointments within the next N hours.
 
     This endpoint is intended to be called by a scheduler/cron job.
     """
-    now = datetime.now(UTC)
 
-    effective_hours = hours_ahead
-    business_name = conversation.DEFAULT_BUSINESS_NAME
-    language_code = "en"
-    if SQLALCHEMY_AVAILABLE and SessionLocal is not None:
-        session_db = SessionLocal()
-        try:
-            row = session_db.get(BusinessDB, business_id)
-        finally:
-            session_db.close()
-        if row is not None:
-            if getattr(row, "default_reminder_hours", None) is not None:
-                effective_hours = row.default_reminder_hours  # type: ignore[assignment]
-            business_name = getattr(row, "name", business_name)
-            language_code = getattr(row, "language_code", "en") or "en"
+    async def _run() -> int:
+        now = datetime.now(UTC)
 
-    cutoff = now + timedelta(hours=effective_hours)
-    sent = 0
+        effective_hours = hours_ahead
+        business_name = conversation.DEFAULT_BUSINESS_NAME
+        language_code = "en"
+        if SQLALCHEMY_AVAILABLE and SessionLocal is not None:
+            session_db = SessionLocal()
+            try:
+                row = session_db.get(BusinessDB, business_id)
+            finally:
+                session_db.close()
+            if row is not None:
+                if getattr(row, "default_reminder_hours", None) is not None:
+                    effective_hours = row.default_reminder_hours  # type: ignore[assignment]
+                business_name = getattr(row, "name", business_name)
+                language_code = getattr(row, "language_code", "en") or "en"
 
-    for appt in appointments_repo.list_for_business(business_id):
-        if appt.reminder_sent:
-            continue
-        # Skip reminders for cancelled or non-active appointments.
-        status = getattr(appt, "status", "SCHEDULED").upper()
-        if status not in {"SCHEDULED", "CONFIRMED"}:
-            continue
-        if not (now <= appt.start_time <= cutoff):
-            continue
-        customer = customers_repo.get(appt.customer_id)
-        if (
-            not customer
-            or not customer.phone
-            or getattr(customer, "sms_opt_out", False)
-        ):
-            continue
-        when_str = appt.start_time.strftime("%a %b %d at %I:%M %p UTC")
-        if language_code == "es":
-            body = (
-                f"Recordatorio: tu cita con {business_name} es el {when_str}.\n"
-                "Si necesitas reprogramarla, por favor llama o envía un mensaje de texto."
-            )
-        else:
-            body = (
-                f"Reminder: your appointment with {business_name} is scheduled for {when_str}.\n"
-                f"If you need to reschedule, please call or text."
-            )
-        await sms_service.notify_customer(customer.phone, body, business_id=business_id)
-        appt.reminder_sent = True
-        sent += 1
+        cutoff = now + timedelta(hours=effective_hours)
+        sent = 0
 
+        for appt in appointments_repo.list_for_business(business_id):
+            if appt.reminder_sent:
+                continue
+            # Skip reminders for cancelled or non-active appointments.
+            status = getattr(appt, "status", "SCHEDULED").upper()
+            if status not in {"SCHEDULED", "CONFIRMED"}:
+                continue
+            if not (now <= appt.start_time <= cutoff):
+                continue
+            customer = customers_repo.get(appt.customer_id)
+            if (
+                not customer
+                or not customer.phone
+                or getattr(customer, "sms_opt_out", False)
+            ):
+                continue
+            when_str = appt.start_time.strftime("%a %b %d at %I:%M %p UTC")
+            if language_code == "es":
+                body = (
+                    f"Recordatorio: tu cita con {business_name} es el {when_str}.\n"
+                    "Si necesitas reprogramarla, por favor llama o envA-a un mensaje de texto."
+                )
+            else:
+                body = (
+                    f"Reminder: your appointment with {business_name} is scheduled for {when_str}.\n"
+                    f"If you need to reschedule, please call or text."
+                )
+            await sms_service.notify_customer(customer.phone, body, business_id=business_id)
+            appt.reminder_sent = True
+            sent += 1
+
+        return sent
+
+    if background:
+        job_queue.enqueue("send_upcoming_reminders", lambda: asyncio.run(_run()))
+        return {"reminders_sent": 0, "queued": True}
+    sent = await _run()
     return {"reminders_sent": sent}
 
 

@@ -1,4 +1,6 @@
 import logging
+import os
+import sys
 import time
 
 from fastapi import FastAPI, HTTPException, Request, Response
@@ -8,6 +10,9 @@ from .db import SQLALCHEMY_AVAILABLE, SessionLocal, init_db
 from .logging_config import configure_logging
 from .metrics import RouteMetrics, metrics
 from .services.audit import record_audit_event
+from .services.retention_purge import start_retention_scheduler
+from .services.job_queue import job_queue
+from .services.rate_limit import RateLimiter, RateLimitError
 from .routers import (
     business_admin,
     chat_widget,
@@ -43,6 +48,32 @@ def create_app() -> FastAPI:
     # Log a brief configuration summary for operational visibility.
     settings = get_settings()
     logger = logging.getLogger(__name__)
+    testing_mode = (
+        bool(os.getenv("PYTEST_CURRENT_TEST"))
+        or os.getenv("TESTING", "false").lower() == "true"
+        or "pytest" in sys.modules
+    )
+    if testing_mode:
+        os.environ.setdefault("TESTING", "true")
+
+    rate_limit_disabled = os.getenv("RATE_LIMIT_DISABLED", "false").lower() == "true"
+    rate_limit_per_minute = settings.rate_limit_per_minute
+    rate_limit_burst = settings.rate_limit_burst
+    if testing_mode:
+        # Keep rate limits effectively disabled during tests unless explicitly tightened.
+        if rate_limit_per_minute == 120 and rate_limit_burst == 20:
+            rate_limit_per_minute = 1_000_000
+            rate_limit_burst = 100_000
+    rate_limiter = RateLimiter(
+        per_minute=rate_limit_per_minute,
+        burst=rate_limit_burst,
+        whitelist_ips=set(settings.rate_limit_whitelist_ips),
+        disabled=rate_limit_disabled,
+    )
+    security_headers_enabled = settings.security_headers_enabled
+    security_csp = settings.security_csp
+    security_hsts_enabled = settings.security_hsts_enabled
+    security_hsts_max_age = settings.security_hsts_max_age
 
     multi_tenant = False
     business_count = None
@@ -88,13 +119,66 @@ def create_app() -> FastAPI:
                 extra=extra,
             )
 
+    purge_interval_hours = getattr(settings, "retention_purge_interval_hours", 24)
+    if (
+        SQLALCHEMY_AVAILABLE
+        and SessionLocal is not None
+        and purge_interval_hours
+        and purge_interval_hours > 0
+    ):
+        try:
+            start_retention_scheduler(int(purge_interval_hours * 3600))
+        except Exception:
+            metrics.background_job_errors += 1
+            logger.exception("retention_purge_scheduler_failed")
+
     @app.middleware("http")
     async def metrics_middleware(request: Request, call_next):
-        metrics.total_requests += 1
         path = request.url.path
+        exempt_paths = {"/healthz", "/readyz", "/metrics", "/metrics/prometheus"}
+
+        metrics.total_requests += 1
         route_metrics = metrics.route_metrics.setdefault(path, RouteMetrics())
         route_metrics.request_count += 1
         start = time.time()
+
+        # Rate limiting on auth/chat/webhooks/voice paths unless explicitly exempted.
+        if path not in exempt_paths and path.startswith(
+            (
+                "/v1/auth",
+                "/v1/chat",
+                "/twilio/",
+                "/v1/twilio/",
+                "/telephony/",
+                "/v1/telephony/",
+                "/v1/voice/",
+            )
+        ):
+            client_ip = request.client.host if request.client else "unknown"
+            api_key = request.headers.get("X-API-Key") or request.headers.get(
+                "X-Widget-Token"
+            )
+            try:
+                rate_limiter.check(key=f"{client_ip}:{api_key or 'anon'}")
+            except RateLimitError as exc:
+                metrics.total_errors += 1
+                route_metrics.error_count += 1
+                response = Response(
+                    status_code=429,
+                    content="Rate limit exceeded. Please retry later.",
+                    headers={"Retry-After": str(exc.retry_after_seconds)},
+                )
+                # Record audit information for rejected requests as well.
+                await record_audit_event(request, response.status_code)
+                if security_headers_enabled:
+                    _apply_security_headers(
+                        response,
+                        security_csp,
+                        security_hsts_enabled,
+                        security_hsts_max_age,
+                    )
+                return response
+
         try:
             response = await call_next(request)
         except HTTPException as exc:
@@ -117,6 +201,10 @@ def create_app() -> FastAPI:
             route_metrics.error_count += 1
         # Successful or handled responses are also audited.
         await record_audit_event(request, response.status_code)
+        if security_headers_enabled:
+            _apply_security_headers(
+                response, security_csp, security_hsts_enabled, security_hsts_max_age
+            )
         return response
 
     app.include_router(voice.router, prefix="/v1/voice", tags=["voice"])
@@ -241,6 +329,101 @@ def create_app() -> FastAPI:
             "ai_telephony_chat_latency_samples",
             float(metrics.chat_latency_samples),
         )
+        # Chat latency histogram buckets (cumulative)
+        bucket_bounds = [100, 250, 500, 1000, 2000, 5000, 10000]
+        cumulative = 0.0
+        for bound in bucket_bounds:
+            cumulative += float(metrics.chat_latency_bucket_counts.get(bound, 0))
+            lines.append(
+                f'ai_telephony_chat_latency_bucket{{le="{bound/1000:.3f}"}} {cumulative}'
+            )
+        cumulative += float(metrics.chat_latency_bucket_counts.get(float("inf"), 0))
+        lines.append(f'ai_telephony_chat_latency_bucket{{le="+Inf"}} {cumulative}')
+        emit("ai_telephony_chat_latency_count", float(metrics.chat_latency_samples))
+        emit("ai_telephony_chat_latency_sum", float(metrics.chat_latency_ms_total))
+
+        # Percentiles from rolling window
+        if metrics.chat_latency_values:
+            sorted_vals = sorted(metrics.chat_latency_values)
+            count = len(sorted_vals)
+
+            def pct(p: float) -> float:
+                if count == 0:
+                    return 0.0
+                idx = min(count - 1, int(round(p * (count - 1))))
+                return sorted_vals[idx]
+
+            emit("ai_telephony_chat_latency_p50_ms", pct(0.50))
+            emit("ai_telephony_chat_latency_p95_ms", pct(0.95))
+            emit("ai_telephony_chat_latency_p99_ms", pct(0.99))
+        else:
+            emit("ai_telephony_chat_latency_p50_ms", 0.0)
+            emit("ai_telephony_chat_latency_p95_ms", 0.0)
+            emit("ai_telephony_chat_latency_p99_ms", 0.0)
+
+        # Conversation latency/profile metrics
+        emit(
+            "ai_telephony_conversation_messages",
+            float(metrics.conversation_messages),
+        )
+        emit(
+            "ai_telephony_conversation_failures",
+            float(metrics.conversation_failures),
+        )
+        emit(
+            "ai_telephony_conversation_latency_ms_total",
+            float(metrics.conversation_latency_ms_total),
+        )
+        emit(
+            "ai_telephony_conversation_latency_ms_max",
+            float(metrics.conversation_latency_ms_max),
+        )
+        emit(
+            "ai_telephony_conversation_latency_samples",
+            float(metrics.conversation_latency_samples),
+        )
+        conv_bucket_bounds = [250, 500, 1000, 2000, 4000, 8000, 12000]
+        cumulative = 0.0
+        for bound in conv_bucket_bounds:
+            cumulative += float(
+                metrics.conversation_latency_bucket_counts.get(bound, 0)
+            )
+            lines.append(
+                f'ai_telephony_conversation_latency_bucket{{le="{bound/1000:.3f}"}} {cumulative}'
+            )
+        cumulative += float(
+            metrics.conversation_latency_bucket_counts.get(float("inf"), 0)
+        )
+        lines.append(f'ai_telephony_conversation_latency_bucket{{le="+Inf"}} {cumulative}')
+        emit(
+            "ai_telephony_conversation_latency_count",
+            float(metrics.conversation_latency_samples),
+        )
+        emit(
+            "ai_telephony_conversation_latency_sum",
+            float(metrics.conversation_latency_ms_total),
+        )
+        if metrics.conversation_latency_values:
+            sorted_vals = sorted(metrics.conversation_latency_values)
+            count = len(sorted_vals)
+
+            def pct_conv(p: float) -> float:
+                if count == 0:
+                    return 0.0
+                idx = min(count - 1, int(round(p * (count - 1))))
+                return sorted_vals[idx]
+
+            emit("ai_telephony_conversation_latency_p50_ms", pct_conv(0.50))
+            emit("ai_telephony_conversation_latency_p95_ms", pct_conv(0.95))
+            emit("ai_telephony_conversation_latency_p99_ms", pct_conv(0.99))
+        else:
+            emit("ai_telephony_conversation_latency_p50_ms", 0.0)
+            emit("ai_telephony_conversation_latency_p95_ms", 0.0)
+            emit("ai_telephony_conversation_latency_p99_ms", 0.0)
+
+        emit("ai_telephony_job_queue_enqueued", float(metrics.job_queue_enqueued))
+        emit("ai_telephony_job_queue_completed", float(metrics.job_queue_completed))
+        emit("ai_telephony_job_queue_failed", float(metrics.job_queue_failed))
         emit(
             "ai_telephony_billing_webhook_failures",
             float(metrics.billing_webhook_failures),
@@ -248,6 +431,22 @@ def create_app() -> FastAPI:
         emit(
             "ai_telephony_background_job_errors",
             float(metrics.background_job_errors),
+        )
+        emit(
+            "ai_telephony_retention_purge_runs",
+            float(metrics.retention_purge_runs),
+        )
+        emit(
+            "ai_telephony_retention_appointments_deleted",
+            float(metrics.retention_appointments_deleted),
+        )
+        emit(
+            "ai_telephony_retention_conversations_deleted",
+            float(metrics.retention_conversations_deleted),
+        )
+        emit(
+            "ai_telephony_retention_messages_deleted",
+            float(metrics.retention_messages_deleted),
         )
 
         # Per-route request/error counts with a path label.
@@ -267,3 +466,23 @@ def create_app() -> FastAPI:
 
 
 app = create_app()
+
+
+def _apply_security_headers(
+    response: Response,
+    csp: str,
+    hsts_enabled: bool,
+    hsts_max_age: int,
+) -> None:
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    response.headers.setdefault(
+        "Permissions-Policy", "geolocation=(), microphone=(), camera=()"
+    )
+    if csp:
+        response.headers.setdefault("Content-Security-Policy", csp)
+    if hsts_enabled:
+        response.headers.setdefault(
+            "Strict-Transport-Security", f"max-age={hsts_max_age}; includeSubDomains"
+        )

@@ -73,7 +73,19 @@ jobs:
             app/services/zip_enrichment.py \
             app/services/twilio_state.py
 
+      - name: Run Alembic migrations (sqlite)
+        working-directory: backend
+        env:
+          DATABASE_URL: sqlite:///./app.db
+        run: |
+          alembic upgrade head
+
+      - name: Run demo data seeder (dry-run)
+        working-directory: backend
+        run: |
+          python seed_demo_data.py --dry-run
+
       - name: Run backend tests
         working-directory: backend
         run: |
-          pytest --cov=app --cov-report=term-missing --cov-fail-under=80
+          pytest --cov=app --cov-report=term-missing --cov-fail-under=90

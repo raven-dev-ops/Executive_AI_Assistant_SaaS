@@ -346,6 +346,7 @@ class DbCustomerRepository:
         phone: str,
         business_id: str,
         opt_out: bool = True,
+        reason: str | None = None,
     ) -> None:
         if SessionLocal is None:
             raise RuntimeError("Database session factory is not available")

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 from abc import ABC, abstractmethod
+import time
 
 import httpx
 
@@ -109,6 +110,18 @@ class SpeechService:
     ) -> None:
         self._settings = settings or get_settings().speech
         self._provider_override = provider
+        self._circuit_open_until: float | None = None
+
+    def _circuit_open(self) -> bool:
+        if self._circuit_open_until is None:
+            return False
+        return time.time() < self._circuit_open_until
+
+    def _trip_circuit(self, cooldown_seconds: int = 60) -> None:
+        self._circuit_open_until = time.time() + cooldown_seconds
+        from ..metrics import metrics
+
+        metrics.speech_circuit_trips += 1
 
     def _select_provider(self) -> SpeechProvider:
         if self._provider_override is not None:
@@ -119,13 +132,27 @@ class SpeechService:
 
     async def transcribe(self, audio: str | None) -> str:
         """Transcribe audio into text via the configured provider."""
+        if self._circuit_open():
+            return ""
+
         provider = self._select_provider()
-        return await provider.transcribe(audio)
+        try:
+            return await provider.transcribe(audio)
+        except Exception:
+            self._trip_circuit()
+            return ""
 
     async def synthesize(self, text: str, voice: str | None = None) -> str:
         """Convert text to speech via the configured provider."""
+        if self._circuit_open():
+            return "audio://placeholder"
+
         provider = self._select_provider()
-        return await provider.synthesize(text, voice=voice)
+        try:
+            return await provider.synthesize(text, voice=voice)
+        except Exception:
+            self._trip_circuit()
+            return "audio://placeholder"
 
     def override_provider(self, provider: SpeechProvider | None) -> None:
         """Swap in a provider (or None to revert to settings-based selection)."""

@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+import json
 import time
-from typing import Optional
+from typing import Optional, Iterable
 
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from ..deps import ensure_business_active, require_owner_dashboard_auth
@@ -111,7 +113,9 @@ def _get_or_create_conversation(conversation_id: Optional[str], business_id: str
 
 @router.post("", response_model=ChatResponse)
 async def chat(
-    payload: ChatRequest, business_id: str = Depends(ensure_business_active)
+    payload: ChatRequest,
+    response: Response,
+    business_id: str = Depends(ensure_business_active),
 ) -> ChatResponse:
     question = (payload.text or "").strip()
     if not question:
@@ -140,9 +144,7 @@ async def chat(
         )
         raise
     latency_ms = (time.perf_counter() - start) * 1000.0
-    metrics.chat_latency_ms_total += latency_ms
-    metrics.chat_latency_ms_max = max(metrics.chat_latency_ms_max, latency_ms)
-    metrics.chat_latency_samples += 1
+    metrics.record_chat_latency(latency_ms)
 
     conv = _get_or_create_conversation(payload.conversation_id, business_id)
     conversations_repo.append_message(conv.id, role="user", text=question)
@@ -167,8 +169,104 @@ async def chat(
             },
         )
 
+    response.headers["X-Conversation-ID"] = conv.id
     return ChatResponse(
         reply_text=answer.answer,
         conversation_id=conv.id,
         used_model=answer.used_model,
     )
+
+
+def _chunk_text(text: str, chunk_size: int = 120) -> Iterable[str]:
+    """Yield small chunks for streaming responses."""
+    if not text:
+        return []
+    words = text.split()
+    current: list[str] = []
+    for word in words:
+        current.append(word)
+        if sum(len(w) for w in current) + len(current) - 1 >= chunk_size:
+            yield " ".join(current)
+            current = []
+    if current:
+        yield " ".join(current)
+
+
+@router.post("/stream")
+async def chat_stream(
+    payload: ChatRequest,
+    response: Response,
+    business_id: str = Depends(ensure_business_active),
+    stream: bool = Query(default=True),
+):
+    """Stream chat replies using text/event-stream (SSE)."""
+    question = (payload.text or "").strip()
+    if not question:
+        raise HTTPException(status_code=400, detail="Message text is required.")
+
+    context = _build_business_context(business_id)
+    conv = _get_or_create_conversation(payload.conversation_id, business_id)
+    conversations_repo.append_message(conv.id, role="user", text=question)
+
+    start = time.perf_counter()
+    try:
+        answer = await owner_assistant_service.answer(
+            question, business_context=context
+        )
+    except Exception as exc:
+        metrics.chat_failures += 1
+        elapsed_ms = (time.perf_counter() - start) * 1000.0
+        metrics.chat_latency_ms_total += elapsed_ms
+        metrics.chat_latency_ms_max = max(metrics.chat_latency_ms_max, elapsed_ms)
+        metrics.chat_latency_samples += 1
+        logger.exception(
+            "chat_message_failed",
+            extra={
+                "business_id": business_id,
+                "conversation_id": payload.conversation_id,
+                "latency_ms": round(elapsed_ms, 2),
+                "error": str(exc),
+            },
+        )
+        raise
+
+    latency_ms = (time.perf_counter() - start) * 1000.0
+    metrics.record_chat_latency(latency_ms)
+    metrics.chat_messages += 1
+
+    conversations_repo.append_message(conv.id, role="assistant", text=answer.answer)
+
+    def event_stream() -> Iterable[str]:
+        meta = {"conversation_id": conv.id, "used_model": answer.used_model}
+        yield f"event: meta\ndata: {json.dumps(meta)}\n\n"
+        for chunk in _chunk_text(answer.answer):
+            yield f"data: {chunk}\n\n"
+        yield "event: done\ndata: end\n\n"
+
+    logger.info(
+        "chat_message_sent",
+        extra={
+            "conversation_id": conv.id,
+            "business_id": business_id,
+            "used_model": answer.used_model,
+            "latency_ms": round(latency_ms, 2),
+            "stream": True,
+        },
+    )
+    if latency_ms > 1200:
+        logger.warning(
+            "chat_latency_slow",
+            extra={
+                "business_id": business_id,
+                "latency_ms": round(latency_ms, 2),
+                "conversation_id": conv.id,
+                "stream": True,
+            },
+        )
+
+    headers = {
+        "Cache-Control": "no-cache",
+        "X-Accel-Buffering": "no",
+    }
+    response.headers["X-Conversation-ID"] = conv.id
+    return StreamingResponse(event_stream(), media_type="text/event-stream", headers=headers)

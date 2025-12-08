@@ -26,3 +26,83 @@ spec:
             summary: "High voice session error rate"
             description: "Voice session API errors exceed 5% of requests for 5 minutes."
 
+        - alert: HighTwilioSmsErrorRate
+          expr: (ai_telephony_twilio_sms_errors / clamp_min(ai_telephony_twilio_sms_requests, 1)) > 0.05
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High Twilio SMS error rate"
+            description: "Twilio SMS webhook errors exceed 5% of requests for 5 minutes."
+
+        - alert: HighChatErrorRate
+          expr: (increase(ai_telephony_chat_failures[5m]) / clamp_min(increase(ai_telephony_chat_messages[5m]), 1)) > 0.05
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High chat error rate"
+            description: "Chat failures exceed 5% of chat messages over the last 5 minutes."
+
+        - alert: ElevatedChatLatency
+          expr: (increase(ai_telephony_chat_latency_ms_total[5m]) / clamp_min(increase(ai_telephony_chat_latency_samples[5m]), 1)) > 1500
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Chat latency high"
+            description: "Average chat latency exceeded 1.5s over the last 10 minutes."
+        - alert: ChatLatencyP95High
+          expr: ai_telephony_chat_latency_p95_ms > 2000
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Chat p95 latency high"
+            description: "Chat p95 latency above 2s."
+        - alert: ChatErrorRateCritical
+          expr: (increase(ai_telephony_chat_failures[5m]) / clamp_min(increase(ai_telephony_chat_messages[5m]), 1)) > 0.1
+          for: 10m
+          labels:
+            severity: critical
+            page: "true"
+          annotations:
+            summary: "Chat error rate critical"
+            description: "Chat failures exceed 10% of chat messages over the last 10 minutes."
+        - alert: SpeechCircuitTrips
+          expr: increase(ai_telephony_speech_circuit_trips[10m]) > 3
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Speech circuit breaker opening frequently"
+            description: "STT/TTS circuit breaker tripped more than 3 times in 10m."
+
+        - alert: WebhookErrorRate
+          expr: (sum by (path) (increase(ai_telephony_route_error_count{path=~\"/twilio/.*|/telephony/.*\"}[5m])) / clamp_min(sum by (path) (increase(ai_telephony_route_request_count{path=~\"/twilio/.*|/telephony/.*\"}[5m])), 1)) > 0.05
+          for: 5m
+          labels:
+            severity: critical
+            page: "true"
+          annotations:
+            summary: "Webhook error rate high"
+            description: "Twilio/telephony webhook paths erroring >5% over the last 5 minutes (check path label)."
+
+        - alert: BackgroundJobFailures
+          expr: increase(ai_telephony_background_job_errors[10m]) > 0
+          for: 0m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Background job failures detected"
+            description: "One or more background job errors occurred in the last 10 minutes."
+
+        - alert: BillingWebhookFailures
+          expr: increase(ai_telephony_billing_webhook_failures[10m]) > 0
+          for: 0m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Billing webhook failures detected"
+            description: "Stripe billing webhook handler reported failures in the last 10 minutes."
+

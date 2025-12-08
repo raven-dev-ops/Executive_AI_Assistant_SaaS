@@ -9,13 +9,15 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 
 from ..config import get_settings
-from ..deps import ensure_business_active, require_owner_dashboard_auth
+from ..deps import ensure_business_active, require_dashboard_role
 from ..repositories import appointments_repo, conversations_repo, customers_repo
 from ..business_config import get_calendar_id_for_business
 from ..services.calendar import TimeSlot, calendar_service
 
 
-router = APIRouter(dependencies=[Depends(require_owner_dashboard_auth)])
+READ_ROLES = ["admin", "owner", "staff", "viewer"]
+WRITE_ROLES = ["admin", "owner", "staff"]
+router = APIRouter(dependencies=[Depends(require_dashboard_role(READ_ROLES))])
 
 
 class CustomerCreateRequest(BaseModel):
@@ -340,6 +342,7 @@ async def _maybe_llm_enrich_qa_suggestions(
 def create_or_update_customer(
     payload: CustomerCreateRequest,
     business_id: str = Depends(ensure_business_active),
+    _: None = Depends(require_dashboard_role(WRITE_ROLES)),
 ) -> CustomerResponse:
     customer = customers_repo.upsert(
         name=payload.name,
@@ -415,6 +418,7 @@ def search_customers(
 def create_appointment(
     payload: AppointmentCreateRequest,
     business_id: str = Depends(ensure_business_active),
+    _: None = Depends(require_dashboard_role(WRITE_ROLES)),
 ) -> AppointmentResponse:
     customer = customers_repo.get(payload.customer_id)
     if not customer:
@@ -570,6 +574,7 @@ async def update_appointment(
     appointment_id: str,
     payload: AppointmentUpdateRequest,
     business_id: str = Depends(ensure_business_active),
+    _: None = Depends(require_dashboard_role(WRITE_ROLES)),
 ) -> AppointmentResponse:
     appt = appointments_repo.get(appointment_id)
     if not appt or appt.business_id != business_id:
@@ -670,6 +675,7 @@ async def update_appointment(
 async def propose_appointment_slots(
     appointment_id: str,
     business_id: str = Depends(ensure_business_active),
+    _: None = Depends(require_dashboard_role(WRITE_ROLES)),
 ) -> list[AppointmentSlotResponse]:
     """Return one or more candidate slots for rescheduling an appointment.
 
@@ -718,6 +724,7 @@ async def propose_appointment_slots(
 async def cancel_appointment(
     appointment_id: str,
     business_id: str = Depends(ensure_business_active),
+    _: None = Depends(require_dashboard_role(WRITE_ROLES)),
 ) -> None:
     appt = appointments_repo.get(appointment_id)
     if not appt or appt.business_id != business_id:
@@ -934,7 +941,9 @@ async def get_conversation(conversation_id: str) -> ConversationDetailResponse:
     "/conversations/{conversation_id}/qa", response_model=ConversationDetailResponse
 )
 async def update_conversation_qa(
-    conversation_id: str, payload: ConversationQAUpdate
+    conversation_id: str,
+    payload: ConversationQAUpdate,
+    _: None = Depends(require_dashboard_role(WRITE_ROLES)),
 ) -> ConversationDetailResponse:
     conv = conversations_repo.get(conversation_id)
     if not conv:

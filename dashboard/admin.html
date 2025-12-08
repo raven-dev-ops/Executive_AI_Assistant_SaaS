@@ -287,7 +287,75 @@
         background: #fee;
         color: #991b1b;
       }
-      
+
+      .status-pending {
+        background: #fef3c7;
+        color: #92400e;
+      }
+
+      .table-scroll {
+        width: 100%;
+        overflow-x: auto;
+      }
+
+      .table-scroll table {
+        min-width: 640px;
+      }
+
+    .drawer-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.55);
+      backdrop-filter: blur(4px);
+      display: none;
+      align-items: center;
+      justify-content: flex-end;
+      z-index: 1000;
+    }
+
+    .drawer {
+      background: #ffffff;
+      width: min(420px, 90vw);
+      height: 100%;
+      padding: 1.25rem;
+      box-shadow: -8px 0 30px rgba(0, 0, 0, 0.15);
+      overflow-y: auto;
+    }
+
+      .spark {
+        width: 100px;
+        height: 8px;
+        background: #e2e8f0;
+        border-radius: 6px;
+        overflow: hidden;
+        display: inline-block;
+        vertical-align: middle;
+      }
+
+      .spark .fill {
+        height: 100%;
+        background: linear-gradient(90deg, #4f46e5, #38bdf8);
+      }
+
+      .spark.dual .fill {
+        background: linear-gradient(90deg, #0ea5e9, #22c55e);
+      }
+
+    .drawer header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 0.75rem;
+    }
+
+    .pill {
+      display: inline-block;
+      padding: 0.25rem 0.6rem;
+      border-radius: 999px;
+      font-size: 0.8rem;
+      background: #f8fafc;
+      color: #475569;
+    }
       input[type="text"],
       input[type="password"],
       input[type="number"],
@@ -559,6 +627,20 @@
       </div>
     </div>
 
+    <!-- Usage Detail Drawer -->
+    <div id="usage-detail-overlay" class="drawer-overlay" aria-hidden="true">
+      <div class="drawer" role="dialog" aria-modal="true" aria-labelledby="usage-detail-title">
+        <header>
+          <div>
+            <h2 id="usage-detail-title">Tenant Detail</h2>
+            <div id="usage-detail-subtitle" class="muted" style="font-size:0.9rem;"></div>
+          </div>
+          <button id="usage-detail-close" type="button" class="secondary">Close</button>
+        </header>
+        <div id="usage-detail-body"></div>
+      </div>
+    </div>
+
     <!-- Main Container -->
     <div class="container">
       <!-- Admin Key Input -->
@@ -604,6 +686,16 @@
           <div class="form-group">
             <input id="tenant-search" type="text" placeholder="Search by ID or name..." />
           </div>
+          <div class="form-group" style="display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:0.5rem;">
+            <select id="tenant-status-filter">
+              <option value="all">All statuses</option>
+              <option value="ACTIVE">Active</option>
+              <option value="SUSPENDED">Suspended</option>
+            </select>
+            <select id="tenant-vertical-filter">
+              <option value="all">All verticals</option>
+            </select>
+          </div>
           <div id="tenants-content">
             <div class="loading">Loading tenants</div>
           </div>
@@ -620,12 +712,30 @@
             </div>
             <h2>Tenant Usage</h2>
           </div>
+          <div class="form-group" style="display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:0.5rem;">
+            <input id="usage-search" type="text" placeholder="Search tenant..." />
+            <select id="usage-status-filter">
+              <option value="all">All statuses</option>
+              <option value="ACTIVE">Active</option>
+              <option value="SUSPENDED">Suspended</option>
+            </select>
+            <select id="usage-health-filter">
+              <option value="all">All health</option>
+              <option value="healthy">Healthy</option>
+              <option value="warn">Degraded</option>
+              <option value="critical">Critical</option>
+            </select>
+            <select id="usage-vertical-filter">
+              <option value="all">All verticals</option>
+            </select>
+          </div>
           <div id="usage-content">
             <div class="loading">Loading usage data</div>
           </div>
           <div class="action-group">
             <button id="refresh-usage" type="button">Refresh</button>
             <button id="download-usage-csv" type="button" class="secondary">Download CSV</button>
+            <button id="download-usage-json" type="button" class="secondary">Download JSON</button>
           </div>
         </div>
 
@@ -960,6 +1070,15 @@
         try {
           const data = await fetchJson("/v1/admin/businesses");
           tenantCache = Array.isArray(data) ? data : [];
+          // Populate vertical filter options
+          const verticals = Array.from(new Set(tenantCache.map((t) => (t.vertical || "").toLowerCase()).filter(Boolean)));
+          const tenantVerticalFilter = document.getElementById("tenant-vertical-filter");
+          if (tenantVerticalFilter) {
+            tenantVerticalFilter.innerHTML = '<option value="all">All verticals</option>';
+            verticals.sort().forEach((v) => {
+              tenantVerticalFilter.insertAdjacentHTML("beforeend", `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`);
+            });
+          }
           renderTenants(tenantCache);
           if (select) {
             select.innerHTML = '<option value="">Select tenant...</option>';
@@ -983,6 +1102,14 @@
         try {
           const data = await fetchJson("/v1/admin/businesses/usage");
           usageCache = Array.isArray(data) ? data : [];
+          const verticals = Array.from(new Set(usageCache.map((u) => (u.vertical || "").toLowerCase()).filter(Boolean)));
+          const usageVerticalFilter = document.getElementById("usage-vertical-filter");
+          if (usageVerticalFilter) {
+            usageVerticalFilter.innerHTML = '<option value="all">All verticals</option>';
+            verticals.sort().forEach((v) => {
+              usageVerticalFilter.insertAdjacentHTML("beforeend", `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`);
+            });
+          }
           renderUsageTable();
         } catch (err) {
           console.error("loadUsage failed", err);
@@ -1154,13 +1281,142 @@
         return Number(value).toLocaleString();
       }
 
+      function usageHealth(u) {
+        const voiceErr = u.twilio_voice_errors || 0;
+        const smsErr = u.twilio_sms_errors || 0;
+        const voiceReq = u.twilio_voice_requests || 0;
+        const smsReq = u.twilio_sms_requests || 0;
+        const totalErr = voiceErr + smsErr;
+        const totalReq = voiceReq + smsReq;
+        const rate = totalReq ? totalErr / totalReq : 0;
+        if (totalErr === 0) return { state: "healthy", label: "Healthy", rate };
+        if (rate > 0.05) return { state: "critical", label: "Critical", rate };
+        return { state: "warn", label: "Degraded", rate };
+      }
+
+      function apptSpark(u) {
+        const ratio = Math.min(
+          100,
+          Math.round(
+            ((u.appointments_last_7_days || 0) / Math.max(1, u.appointments_last_30_days || 0)) * 100
+          )
+        );
+        return `<div class="spark"><div class="fill" style="width:${ratio}%;"></div></div>`;
+      }
+
+      function smsSpark(u) {
+        const owner = u.sms_owner_messages || 0;
+        const cust = u.sms_customer_messages || 0;
+        const total = owner + cust || 1;
+        const ownerPct = Math.round((owner / total) * 100);
+        return `<div class="spark dual"><div class="fill" style="width:${ownerPct}%;"></div></div>`;
+      }
+
+      function formatRelative(isoString) {
+        if (!isoString) return "n/a";
+        const dt = new Date(isoString);
+        if (Number.isNaN(dt.getTime())) return "n/a";
+        const diffMs = Date.now() - dt.getTime();
+        const mins = Math.floor(diffMs / 60000);
+        if (mins < 1) return "just now";
+        if (mins < 60) return `${mins}m ago`;
+        const hours = Math.floor(mins / 60);
+        if (hours < 24) return `${hours}h ago`;
+        const days = Math.floor(hours / 24);
+        return `${days}d ago`;
+      }
+
+      function renderUsageDetail(tenantId) {
+        const overlay = document.getElementById("usage-detail-overlay");
+        const title = document.getElementById("usage-detail-title");
+        const subtitle = document.getElementById("usage-detail-subtitle");
+        const body = document.getElementById("usage-detail-body");
+        if (!overlay || !title || !body) return;
+        const u = usageCache.find((x) => x.id === tenantId);
+        if (!u) return;
+        const health = usageHealth(u);
+        title.textContent = u.name || u.id;
+        subtitle.textContent = `${u.id} • ${u.status || "ACTIVE"} • ${u.vertical || "n/a"}`;
+        const errRate = (u.twilio_error_rate || 0).toFixed(3);
+        body.innerHTML = `
+          <div style="display:grid; gap:0.75rem;">
+            <div>
+              <div class="pill">Health: ${health.label}</div>
+              <div class="muted" style="margin-top:0.25rem;">Twilio error rate: ${errRate}</div>
+            </div>
+            <div class="info-grid">
+              <div class="info-item">
+                <div class="info-label">Appointments (30d)</div>
+                <div class="info-value">${formatNumber(u.appointments_last_30_days || 0)}</div>
+                <div class="info-sub">${formatNumber(u.appointments_last_7_days || 0)} in 7d</div>
+                ${apptSpark(u)}
+              </div>
+              <div class="info-item">
+                <div class="info-label">Emergencies (30d)</div>
+                <div class="info-value">${formatNumber(u.emergencies_last_30_days || 0)}</div>
+                <div class="info-sub">${formatNumber(u.emergencies_last_7_days || 0)} in 7d</div>
+              </div>
+              <div class="info-item">
+                <div class="info-label">SMS</div>
+                <div class="info-value">${formatNumber(u.sms_total_messages || 0)}</div>
+                <div class="info-sub">${formatNumber(u.sms_owner_messages || 0)} owner / ${formatNumber(u.sms_customer_messages || 0)} customer</div>
+                ${smsSpark(u)}
+              </div>
+              <div class="info-item">
+                <div class="info-label">Twilio Requests</div>
+                <div class="info-value">${formatNumber((u.twilio_voice_requests || 0) + (u.twilio_sms_requests || 0))}</div>
+                <div class="info-sub">${formatNumber(u.twilio_voice_errors || 0)} voice / ${formatNumber(u.twilio_sms_errors || 0)} sms errors</div>
+              </div>
+            </div>
+            <div>
+              <div class="info-label">Last activity</div>
+              <div class="info-value">${formatRelative(u.last_activity_at)}</div>
+              <div class="info-sub">${u.last_activity_at || ""}</div>
+            </div>
+            <div class="info-grid">
+              <div class="info-item">
+                <div class="info-label">Customers</div>
+                <div class="info-value">${formatNumber(u.total_customers || 0)}</div>
+                <div class="info-sub">${formatNumber(u.sms_opt_out_customers || 0)} SMS opt-out</div>
+              </div>
+              <div class="info-item">
+                <div class="info-label">Conversations</div>
+                <div class="info-value">${formatNumber(u.total_conversations || 0)}</div>
+                <div class="info-sub">${formatNumber(u.flagged_conversations || 0)} flagged</div>
+              </div>
+              <div class="info-item">
+                <div class="info-label">Pending Reschedules</div>
+                <div class="info-value">${formatNumber(u.pending_reschedules || 0)}</div>
+              </div>
+            </div>
+          </div>
+        `;
+        overlay.style.display = "flex";
+        overlay.setAttribute("aria-hidden", "false");
+      }
+
+      function closeUsageDetail() {
+        const overlay = document.getElementById("usage-detail-overlay");
+        if (overlay) {
+          overlay.style.display = "none";
+          overlay.setAttribute("aria-hidden", "true");
+        }
+      }
+
       function renderTenants(source) {
         const el = document.getElementById("tenants-content");
         const search = (document.getElementById("tenant-search")?.value || "").toLowerCase().trim();
+        const statusFilter = (document.getElementById("tenant-status-filter")?.value || "all").toUpperCase();
+        const verticalFilter = (document.getElementById("tenant-vertical-filter")?.value || "all").toLowerCase();
         if (!el) return;
         const filtered = (source || []).filter((t) => {
-          const haystack = `${t.id || ""} ${t.name || ""}`.toLowerCase();
-          return !search || haystack.includes(search);
+          const haystack = `${t.id || ""} ${t.name || ""} ${t.owner_email || ""}`.toLowerCase();
+          const status = String(t.status || "ACTIVE").toUpperCase();
+          const vertical = (t.vertical || "").toLowerCase();
+          const matchesSearch = !search || haystack.includes(search);
+          const matchesStatus = statusFilter === "ALL" || status === statusFilter;
+          const matchesVertical = verticalFilter === "all" || vertical === verticalFilter;
+          return matchesSearch && matchesStatus && matchesVertical;
         });
         if (!filtered.length) {
           el.innerHTML = '<div class="empty-state"><p>No tenants match that search</p></div>';
@@ -1170,6 +1426,8 @@
           .map((t) => {
             const statusClass = String(t.status || "ACTIVE").toUpperCase() === "ACTIVE" ? "status-active" : "status-suspended";
             const statusLabel = escapeHtml((t.status || "ACTIVE").toUpperCase());
+            const usage = usageCache.find((u) => u.id === t.id);
+            const lastAct = usage ? formatRelative(usage.last_activity_at) : "n/a";
             return `
               <tr>
                 <td><strong>${escapeHtml(t.name || t.id)}</strong><br/><small class="muted">${escapeHtml(t.id)}</small></td>
@@ -1177,23 +1435,27 @@
                 <td>${escapeHtml(t.vertical || "n/a")}</td>
                 <td>${escapeHtml(t.owner_email || "—")}</td>
                 <td>${escapeHtml(t.owner_phone || "—")}</td>
+                <td>${escapeHtml(lastAct)}</td>
               </tr>
             `;
           })
           .join("");
         el.innerHTML = `
-          <table>
-            <thead>
-              <tr>
-                <th>Tenant</th>
-                <th>Status</th>
-                <th>Vertical</th>
-                <th>Owner Email</th>
-                <th>Owner Phone</th>
-              </tr>
-            </thead>
-            <tbody>${rows}</tbody>
-          </table>
+          <div class="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Tenant</th>
+                  <th>Status</th>
+                  <th>Vertical</th>
+                  <th>Owner Email</th>
+                  <th>Owner Phone</th>
+                  <th>Last Activity</th>
+                </tr>
+              </thead>
+              <tbody>${rows}</tbody>
+            </table>
+          </div>
         `;
       }
 
@@ -1204,14 +1466,42 @@
           el.innerHTML = '<div class="empty-state"><p>No usage data available</p></div>';
           return;
         }
-        const sorted = [...usageCache].sort((a, b) => {
-          const aVal = a[usageSort.key] ?? 0;
-          const bVal = b[usageSort.key] ?? 0;
-          if (aVal === bVal) return 0;
-          return usageSort.dir === "asc" ? aVal - bVal : bVal - aVal;
+        const search = (document.getElementById("usage-search")?.value || "").toLowerCase().trim();
+        const statusFilter = (document.getElementById("usage-status-filter")?.value || "all").toUpperCase();
+        const verticalFilter = (document.getElementById("usage-vertical-filter")?.value || "all").toLowerCase();
+        const healthFilter = (document.getElementById("usage-health-filter")?.value || "all").toLowerCase();
+        const filtered = usageCache.filter((u) => {
+          const haystack = `${u.id || ""} ${u.name || ""} ${u.vertical || ""}`.toLowerCase();
+          const status = String(u.status || "ACTIVE").toUpperCase();
+          const vertical = (u.vertical || "").toLowerCase();
+          const health = usageHealth(u).state;
+          const matchesSearch = !search || haystack.includes(search);
+          const matchesStatus = statusFilter === "ALL" || status === statusFilter;
+          const matchesVertical = verticalFilter === "all" || vertical === verticalFilter;
+          const matchesHealth = healthFilter === "all" || health === healthFilter;
+          return matchesSearch && matchesStatus && matchesVertical && matchesHealth;
+        });
+        if (!filtered.length) {
+          el.innerHTML = '<div class="empty-state"><p>No usage matches those filters</p></div>';
+          return;
+        }
+        const sorted = [...filtered].sort((a, b) => {
+          const aVal = a[usageSort.key];
+          const bVal = b[usageSort.key];
+          const numA = Number(aVal);
+          const numB = Number(bVal);
+          const bothNum = !Number.isNaN(numA) && !Number.isNaN(numB);
+          let cmp = 0;
+          if (bothNum) {
+            cmp = numA - numB;
+          } else {
+            cmp = String(aVal || "").localeCompare(String(bVal || ""), undefined, { sensitivity: "base" });
+          }
+          return usageSort.dir === "asc" ? cmp : -cmp;
         });
         const rows = sorted
           .map((u) => {
+            const health = usageHealth(u);
             const statusClass = String(u.status || "ACTIVE").toUpperCase() === "ACTIVE" ? "status-active" : "status-suspended";
             const statusLabel = escapeHtml((u.status || "ACTIVE").toUpperCase());
             const alertFlag = (u.twilio_voice_errors || 0) > 0 || (u.twilio_sms_errors || 0) > 0;
@@ -1226,17 +1516,20 @@
               : 0;
             const growthLabel = growth ? `${growth}% of 30d in past 7d` : "";
             return `
-              <tr${muted}>
+              <tr class="usage-row" data-tenant-id="${escapeHtml(u.id || "")}"${muted}>
                 <td>
                   <strong>${escapeHtml(u.name || u.id)}</strong><br/>
                   <small class="muted">${escapeHtml(u.id)}</small>
                 </td>
+                <td>${escapeHtml(u.vertical || "n/a")}</td>
                 <td><span class="status-tag ${statusClass}">${statusLabel}</span></td>
-                <td>${formatNumber(appts30)} (30d)<br/><small class="muted">${formatNumber(u.appointments_last_7_days)} in 7d</small>${errorBar}</td>
+                <td><span class="status-tag ${health.state === "critical" ? "status-suspended" : health.state === "warn" ? "status-pending" : "status-active"}">${health.label}</span><br/><small class="muted">${formatNumber(u.twilio_voice_errors || 0)} voice / ${formatNumber(u.twilio_sms_errors || 0)} sms errors</small></td>
+                <td>${formatNumber(appts30)} (30d)<br/><small class="muted">${formatNumber(u.appointments_last_7_days)} in 7d</small>${apptSpark(u)}</td>
                 <td>${formatNumber(u.emergencies_last_30_days)}<br/><small class="muted">${formatNumber(u.emergencies_last_7_days)} in 7d</small></td>
-                <td>${formatNumber(u.sms_owner_messages)} owner<br/><small class="muted">${formatNumber(u.sms_customer_messages)} customer</small></td>
+                <td>${formatNumber(u.sms_owner_messages)} owner<br/><small class="muted">${formatNumber(u.sms_customer_messages)} customer</small>${smsSpark(u)}</td>
                 <td>${formatNumber(u.total_customers)} customers<br/><small class="muted">${formatNumber(u.total_conversations)} convos</small></td>
                 <td>${formatNumber(u.pending_reschedules)} reschedules<br/><small class="muted">${formatNumber(u.flagged_conversations)} flagged</small></td>
+                <td>${formatRelative(u.last_activity_at)}</td>
               </tr>
             `;
           })
@@ -1272,20 +1565,25 @@
             <div style="font-weight:600; margin-bottom:0.35rem;">Top tenants (30d appointments)</div>
             ${summary || '<div class="empty-state" style="padding:0.75rem;">No activity yet</div>'}
           </div>
-          <table>
-            <thead>
-              <tr>
-                <th data-sort="name" class="sortable">Tenant</th>
-                <th data-sort="status" class="sortable">Status</th>
-                <th data-sort="appointments_last_30_days" class="sortable">Appointments</th>
-                <th data-sort="emergencies_last_30_days" class="sortable">Emergencies</th>
-                <th data-sort="sms_total_messages" class="sortable">SMS</th>
-                <th data-sort="total_customers" class="sortable">Customers</th>
-                <th data-sort="pending_reschedules" class="sortable">Operational</th>
-              </tr>
-            </thead>
-            <tbody>${rows}</tbody>
-          </table>
+          <div class="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th data-sort="name" class="sortable">Tenant</th>
+                  <th data-sort="vertical" class="sortable">Vertical</th>
+                  <th data-sort="status" class="sortable">Status</th>
+                  <th>Health</th>
+                  <th data-sort="appointments_last_30_days" class="sortable">Appointments</th>
+                  <th data-sort="emergencies_last_30_days" class="sortable">Emergencies</th>
+                  <th data-sort="sms_total_messages" class="sortable">SMS</th>
+                  <th data-sort="total_customers" class="sortable">Customers</th>
+                  <th data-sort="pending_reschedules" class="sortable">Operational</th>
+                  <th>Last Activity</th>
+                </tr>
+              </thead>
+              <tbody>${rows}</tbody>
+            </table>
+          </div>
         `;
 
         el.querySelectorAll("th.sortable").forEach((th) => {
@@ -1297,13 +1595,33 @@
             } else {
               usageSort = { key, dir: "desc" };
             }
-            renderUsageTable();
+           renderUsageTable();
+         });
+       });
+        el.querySelectorAll(".usage-row").forEach((row) => {
+          row.style.cursor = "pointer";
+          row.addEventListener("click", () => {
+            const id = row.getAttribute("data-tenant-id");
+            if (id) renderUsageDetail(id);
           });
         });
       }
 
       // Filters and buttons wiring
       document.getElementById("tenant-search")?.addEventListener("input", () => renderTenants(tenantCache));
+      document.getElementById("tenant-status-filter")?.addEventListener("change", () => renderTenants(tenantCache));
+      document.getElementById("tenant-vertical-filter")?.addEventListener("change", () => renderTenants(tenantCache));
+      document.getElementById("usage-search")?.addEventListener("input", renderUsageTable);
+      document.getElementById("usage-status-filter")?.addEventListener("change", renderUsageTable);
+      document.getElementById("usage-health-filter")?.addEventListener("change", renderUsageTable);
+      document.getElementById("usage-vertical-filter")?.addEventListener("change", renderUsageTable);
+      document.getElementById("usage-detail-close")?.addEventListener("click", closeUsageDetail);
+      document.getElementById("usage-detail-overlay")?.addEventListener("click", (e) => {
+        if (e.target && e.target.id === "usage-detail-overlay") {
+          closeUsageDetail();
+        }
+      });
+
       document.getElementById("download-usage-csv")?.addEventListener("click", async () => {
         try {
           const res = await fetch(backendBase + "/v1/admin/businesses/usage.csv", {
@@ -1321,6 +1639,25 @@
           URL.revokeObjectURL(url);
         } catch (err) {
           alert("Unable to download usage CSV: " + (err.message || err));
+        }
+      });
+      document.getElementById("download-usage-json")?.addEventListener("click", async () => {
+        try {
+          const res = await fetch(backendBase + "/v1/admin/businesses/usage.json", {
+            headers: adminHeaders(),
+          });
+          if (!res.ok) throw new Error("Download failed: " + res.status);
+          const blob = await res.blob();
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = "tenant_usage.json";
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          URL.revokeObjectURL(url);
+        } catch (err) {
+          alert("Unable to download usage JSON: " + (err.message || err));
         }
       });
     </script>

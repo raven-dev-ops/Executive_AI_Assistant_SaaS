@@ -7,7 +7,7 @@ import os
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, EmailStr, Field
 
-from ..deps import ensure_business_active, require_owner_dashboard_auth
+from ..deps import ensure_business_active, require_dashboard_role
 from ..repositories import appointments_repo, conversations_repo, customers_repo
 from ..services.stt_tts import speech_service
 from ..db import SQLALCHEMY_AVAILABLE, SessionLocal
@@ -25,7 +25,9 @@ from ..services.zip_enrichment import fetch_zip_income
 from ..business_config import get_voice_for_business
 
 
-router = APIRouter(dependencies=[Depends(require_owner_dashboard_auth)])
+router = APIRouter(
+    dependencies=[Depends(require_dashboard_role(["admin", "owner", "staff", "viewer"]))]
+)
 
 
 class OwnerAppointmentItem(BaseModel):

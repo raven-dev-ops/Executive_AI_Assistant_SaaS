@@ -28,6 +28,25 @@ class SpeechSettings(BaseModel):
     openai_chat_model: str = "gpt-4o-mini"
 
 
+class OAuthSettings(BaseModel):
+    redirect_base: str = os.getenv("OAUTH_REDIRECT_BASE", "http://localhost:8000/auth")
+    state_secret: str = os.getenv("AUTH_STATE_SECRET", "dev-secret")
+    linkedin_client_id: str | None = os.getenv("LINKEDIN_CLIENT_ID")
+    linkedin_client_secret: str | None = os.getenv("LINKEDIN_CLIENT_SECRET")
+    linkedin_scopes: str = os.getenv(
+        "LINKEDIN_SCOPES", "r_liteprofile r_emailaddress w_member_social"
+    )
+    google_client_id: str | None = os.getenv("GOOGLE_CLIENT_ID")
+    google_client_secret: str | None = os.getenv("GOOGLE_CLIENT_SECRET")
+    gmail_scopes: str = os.getenv(
+        "GMAIL_SCOPES", "openid email profile https://www.googleapis.com/auth/gmail.readonly"
+    )
+    gcalendar_scopes: str = os.getenv(
+        "GCALENDAR_SCOPES",
+        "openid email profile https://www.googleapis.com/auth/calendar.events.readonly",
+    )
+
+
 class SmsSettings(BaseModel):
     provider: str = "stub"  # "stub" or "twilio"
     from_number: str | None = None
@@ -72,11 +91,14 @@ class StripeSettings(BaseModel):
     price_growth: str | None = None
     price_scale: str | None = None
     use_stub: bool = True
+    verify_signatures: bool = True
+    replay_protection_seconds: int = 300
 
 
 class AppSettings(BaseModel):
     calendar: CalendarSettings = CalendarSettings()
     speech: SpeechSettings = SpeechSettings()
+    oauth: OAuthSettings = OAuthSettings()
     sms: SmsSettings = SmsSettings()
     quickbooks: QuickBooksSettings = QuickBooksSettings()
     stripe: StripeSettings = StripeSettings()
@@ -86,6 +108,22 @@ class AppSettings(BaseModel):
     owner_dashboard_token: str | None = None
     session_store_backend: str = "memory"
     default_language_code: str = "en"
+    rate_limit_per_minute: int = 120
+    rate_limit_burst: int = 20
+    rate_limit_whitelist_ips: list[str] = []
+    retention_purge_interval_hours: int = 24
+    security_headers_enabled: bool = True
+    security_csp: str = (
+        "default-src 'self'; "
+        "img-src 'self' data:; "
+        "script-src 'self'; "
+        "style-src 'self' 'unsafe-inline'; "
+        "font-src 'self'; "
+        "connect-src 'self'; "
+        "frame-ancestors 'none'"
+    )
+    security_hsts_enabled: bool = True
+    security_hsts_max_age: int = 31536000  # 1 year
 
     @classmethod
     def from_env(cls) -> "AppSettings":
@@ -120,6 +158,25 @@ class AppSettings(BaseModel):
             openai_stt_model=os.getenv("OPENAI_STT_MODEL", "gpt-4o-mini-transcribe"),
             openai_chat_model=os.getenv("OPENAI_CHAT_MODEL", "gpt-4o-mini"),
         )
+        oauth = OAuthSettings(
+            redirect_base=os.getenv("OAUTH_REDIRECT_BASE", "http://localhost:8000/auth"),
+            state_secret=os.getenv("AUTH_STATE_SECRET", "dev-secret"),
+            linkedin_client_id=os.getenv("LINKEDIN_CLIENT_ID"),
+            linkedin_client_secret=os.getenv("LINKEDIN_CLIENT_SECRET"),
+            linkedin_scopes=os.getenv(
+                "LINKEDIN_SCOPES", "r_liteprofile r_emailaddress w_member_social"
+            ),
+            google_client_id=os.getenv("GOOGLE_CLIENT_ID"),
+            google_client_secret=os.getenv("GOOGLE_CLIENT_SECRET"),
+            gmail_scopes=os.getenv(
+                "GMAIL_SCOPES",
+                "openid email profile https://www.googleapis.com/auth/gmail.readonly",
+            ),
+            gcalendar_scopes=os.getenv(
+                "GCALENDAR_SCOPES",
+                "openid email profile https://www.googleapis.com/auth/calendar.events.readonly",
+            ),
+        )
         sms = SmsSettings(
             provider=os.getenv("SMS_PROVIDER", "stub"),
             from_number=os.getenv("SMS_FROM_NUMBER"),
@@ -150,6 +207,11 @@ class AppSettings(BaseModel):
             price_growth=os.getenv("STRIPE_PRICE_GROWTH"),
             price_scale=os.getenv("STRIPE_PRICE_SCALE"),
             use_stub=os.getenv("STRIPE_USE_STUB", "true").lower() != "false",
+            verify_signatures=os.getenv("STRIPE_VERIFY_SIGNATURES", "true").lower()
+            == "true",
+            replay_protection_seconds=int(
+                os.getenv("STRIPE_REPLAY_PROTECTION_SECONDS", "300")
+            ),
         )
         admin_api_key = os.getenv("ADMIN_API_KEY")
         default_vertical = os.getenv("DEFAULT_VERTICAL", "plumbing")
@@ -163,9 +225,37 @@ class AppSettings(BaseModel):
             "DASHBOARD_OWNER_TOKEN"
         )
         session_store_backend = os.getenv("SESSION_STORE_BACKEND", "memory")
+        rate_limit_per_minute = int(os.getenv("RATE_LIMIT_PER_MINUTE", "120"))
+        rate_limit_burst = int(os.getenv("RATE_LIMIT_BURST", "20"))
+        rate_limit_whitelist_ips = [
+            ip.strip()
+            for ip in (os.getenv("RATE_LIMIT_WHITELIST_IPS", "") or "").split(",")
+            if ip.strip()
+        ]
+        retention_purge_interval_hours = int(
+            os.getenv("RETENTION_PURGE_INTERVAL_HOURS", "24")
+        )
+        security_headers_enabled = (
+            os.getenv("SECURITY_HEADERS_ENABLED", "true").lower() == "true"
+        )
+        security_csp = os.getenv(
+            "SECURITY_CSP",
+            "default-src 'self'; "
+            "img-src 'self' data:; "
+            "script-src 'self'; "
+            "style-src 'self' 'unsafe-inline'; "
+            "font-src 'self'; "
+            "connect-src 'self'; "
+            "frame-ancestors 'none'",
+        )
+        security_hsts_enabled = (
+            os.getenv("SECURITY_HSTS_ENABLED", "true").lower() == "true"
+        )
+        security_hsts_max_age = int(os.getenv("SECURITY_HSTS_MAX_AGE", "31536000"))
         return cls(
             calendar=calendar,
             speech=speech,
+            oauth=oauth,
             sms=sms,
             quickbooks=quickbooks,
             stripe=stripe,
@@ -175,6 +265,14 @@ class AppSettings(BaseModel):
             owner_dashboard_token=owner_dashboard_token,
             session_store_backend=session_store_backend,
             default_language_code=default_language_code,
+            rate_limit_per_minute=rate_limit_per_minute,
+            rate_limit_burst=rate_limit_burst,
+            rate_limit_whitelist_ips=rate_limit_whitelist_ips,
+            retention_purge_interval_hours=retention_purge_interval_hours,
+            security_headers_enabled=security_headers_enabled,
+            security_csp=security_csp,
+            security_hsts_enabled=security_hsts_enabled,
+            security_hsts_max_age=security_hsts_max_age,
         )
 
     def validate_combinations(self) -> None:

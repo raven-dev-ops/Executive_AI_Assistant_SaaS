@@ -1,0 +1,35 @@
+steps:
+  - name: gcr.io/cloud-builders/docker
+    dir: backend
+    args:
+      - build
+      - .
+      - -t
+      - us-central1-docker.pkg.dev/$PROJECT_ID/ai-telephony-backend/backend:$COMMIT_SHA
+      - -t
+      - us-central1-docker.pkg.dev/$PROJECT_ID/ai-telephony-backend/backend:latest
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - push
+      - us-central1-docker.pkg.dev/$PROJECT_ID/ai-telephony-backend/backend:$COMMIT_SHA
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - push
+      - us-central1-docker.pkg.dev/$PROJECT_ID/ai-telephony-backend/backend:latest
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - ai-telephony-backend
+      - --region=us-central1
+      - --image=us-central1-docker.pkg.dev/$PROJECT_ID/ai-telephony-backend/backend:$COMMIT_SHA
+      - --platform=managed
+      - --allow-unauthenticated
+      - --service-account=ai-telephony-backend-runner@$PROJECT_ID.iam.gserviceaccount.com
+      - --set-env-vars=GCS_DASHBOARD_BUCKET=ai-telephony-dash-poc-mpf-dmxmytcubly9
+images:
+  - us-central1-docker.pkg.dev/$PROJECT_ID/ai-telephony-backend/backend:$COMMIT_SHA
+  - us-central1-docker.pkg.dev/$PROJECT_ID/ai-telephony-backend/backend:latest
+options:
+  logging: CLOUD_LOGGING_ONLY

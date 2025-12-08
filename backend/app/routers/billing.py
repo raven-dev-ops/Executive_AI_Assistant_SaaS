@@ -40,6 +40,10 @@ class CheckoutSessionResponse(BaseModel):
     mode: str = "subscription"
 
 
+class BillingPortalResponse(BaseModel):
+    url: str
+
+
 class BillingWebhookEvent(BaseModel):
     type: str
     data: dict
@@ -123,12 +127,18 @@ def create_checkout_session(
     customer_email: Optional[str] = None,
     business_id: str = Depends(ensure_business_active),
 ) -> CheckoutSessionResponse:
-    """Return a Stripe Checkout session URL (stub unless STRIPE_API_KEY set)."""
+    """Return a Stripe Checkout session URL (prefers configured payment link)."""
     stripe_cfg = get_settings().stripe
     plans = {p.id: p for p in _plans_from_settings()}
     plan = plans.get(plan_id)
     if not plan:
         raise HTTPException(status_code=404, detail="Plan not found")
+
+    # Prefer a prebuilt Stripe Payment Link when provided (low-code path).
+    if stripe_cfg.payment_link_url:
+        return CheckoutSessionResponse(
+            url=stripe_cfg.payment_link_url, session_id="stripe_payment_link"
+        )
 
     if stripe_cfg.use_stub or not stripe_cfg.api_key or not plan.stripe_price_id:
         url = f"https://example.com/checkout?plan={plan.id}&business_id={business_id}"
@@ -140,6 +150,15 @@ def create_checkout_session(
         url=url, session_id=f"session_{plan.stripe_price_id}"
     )
 
+
+
+@router.get("/portal-link", response_model=BillingPortalResponse)
+def get_billing_portal_link() -> BillingPortalResponse:
+    """Return a pre-configured Stripe billing portal URL if available."""
+    stripe_cfg = get_settings().stripe
+    if not stripe_cfg.billing_portal_url:
+        raise HTTPException(status_code=404, detail="Billing portal not configured")
+    return BillingPortalResponse(url=stripe_cfg.billing_portal_url)
 
 @router.post("/webhook")
 async def billing_webhook(

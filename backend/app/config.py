@@ -92,6 +92,8 @@ class StripeSettings(BaseModel):
     price_basic: str | None = None
     price_growth: str | None = None
     price_scale: str | None = None
+    payment_link_url: str | None = None
+    billing_portal_url: str | None = None
     use_stub: bool = True
     verify_signatures: bool = True
     replay_protection_seconds: int = 300
@@ -211,6 +213,8 @@ class AppSettings(BaseModel):
             price_basic=os.getenv("STRIPE_PRICE_BASIC"),
             price_growth=os.getenv("STRIPE_PRICE_GROWTH"),
             price_scale=os.getenv("STRIPE_PRICE_SCALE"),
+            payment_link_url=os.getenv("STRIPE_PAYMENT_LINK_URL"),
+            billing_portal_url=os.getenv("STRIPE_BILLING_PORTAL_URL"),
             use_stub=os.getenv("STRIPE_USE_STUB", "true").lower() != "false",
             verify_signatures=os.getenv("STRIPE_VERIFY_SIGNATURES", "true").lower()
             == "true",

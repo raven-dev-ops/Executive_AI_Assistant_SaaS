@@ -87,6 +87,7 @@ class QuickBooksSettings(BaseModel):
 
 class StripeSettings(BaseModel):
     api_key: str | None = None
+    publishable_key: str | None = None
     webhook_secret: str | None = None
     price_basic: str | None = None
     price_growth: str | None = None
@@ -205,6 +206,7 @@ class AppSettings(BaseModel):
         )
         stripe = StripeSettings(
             api_key=os.getenv("STRIPE_API_KEY"),
+            publishable_key=os.getenv("STRIPE_PUBLISHABLE_KEY"),
             webhook_secret=os.getenv("STRIPE_WEBHOOK_SECRET"),
             price_basic=os.getenv("STRIPE_PRICE_BASIC"),
             price_growth=os.getenv("STRIPE_PRICE_GROWTH"),

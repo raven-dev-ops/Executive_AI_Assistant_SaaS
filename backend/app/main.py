@@ -11,7 +11,6 @@ from .logging_config import configure_logging
 from .metrics import RouteMetrics, metrics
 from .services.audit import record_audit_event
 from .services.retention_purge import start_retention_scheduler
-from .services.job_queue import job_queue
 from .services.rate_limit import RateLimiter, RateLimitError
 from .routers import (
     business_admin,

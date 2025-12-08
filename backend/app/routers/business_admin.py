@@ -12,15 +12,7 @@ from pydantic import BaseModel, Field
 
 from ..config import get_settings
 from ..db import SQLALCHEMY_AVAILABLE, SessionLocal
-from ..db_models import (
-    AppointmentDB,
-    AuditEventDB,
-    BusinessDB,
-    ConversationDB,
-    ConversationMessageDB,
-    RetentionPurgeLogDB,
-    TechnicianDB,
-)
+from ..db_models import AuditEventDB, BusinessDB, RetentionPurgeLogDB, TechnicianDB
 from ..deps import require_admin_auth
 from ..metrics import metrics
 from ..repositories import appointments_repo, conversations_repo, customers_repo

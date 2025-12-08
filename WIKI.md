@@ -211,3 +211,15 @@ These principles should inform every code and infrastructure contribution to thi
 - Editable installs use explicit setuptools discovery (`backend/pyproject.toml`) to package only the `app` module while excluding `alembic` and test code, preventing accidental inclusion of migration scaffolding.
 - OAuth integration tests (`backend/tests/test_auth_integration_real_flows.py`) assert the Google authorization hostname equals `accounts.google.com` and validate expected query params (`client_id`, `state`) to guard against incomplete URL sanitization and catch misconfigurations early.
 - OAuth test fixtures set `state_secret` for deterministic runs; ensure `GOOGLE_CLIENT_ID` and `LINKEDIN_CLIENT_ID` are configured or defaulted before running integration tests.
+
+8. Dashboard Hosting (Cloud Run Proxy, No Signed URLs)
+-------------------------------------------------------
+
+- Dashboards (owner/admin) are served by a Cloud Run proxy instead of GCS signed URLs:
+  - Service: `ai-telephony-dash` (region `us-central1`)
+  - Image: `us-central1-docker.pkg.dev/google-mpf-dmxmytcubly9/ai-telephony-backend/dashboard-proxy:latest`
+  - URL: `https://ai-telephony-dash-215484517190.us-central1.run.app`
+- The proxy fetches static files from `gs://ai-telephony-dash-poc-mpf-dmxmytcubly9` using the runtime service account `dash-signer@google-mpf-dmxmytcubly9.iam.gserviceaccount.com` (object viewer). No SA keys or signed URLs are required.
+- Auth enforcement: every request must include at least one app header (`X-Admin-API-Key`, `X-Owner-Token`, or `X-API-Key`). Public/anonymous access is not needed.
+- Routing: `/` or `/owner` -> `index.html`; `/admin` -> `admin.html`; other paths map to the same-named object in the bucket (JS/CSS/assets).
+- Rationale: avoids org policy blocks on key creation and keeps dashboards behind existing app auth while using Cloud Run as the entry point.

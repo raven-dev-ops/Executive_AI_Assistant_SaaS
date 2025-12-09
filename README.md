@@ -38,8 +38,10 @@ To run the backend and dashboards locally:
    - Enter `X-Admin-API-Key` and use the **Tenants**, **Tenant Usage**, and **Twilio / Webhook Health** cards to manage and inspect tenants.
 
 4. **Explore the API**
-   - Visit `http://localhost:8000/docs` for interactive docs.
-   - See `API_REFERENCE.md` for a route-by-route summary grouped by area (voice, telephony, Twilio, CRM, owner, admin, reminders, retention, widget).
+- Visit `http://localhost:8000/docs` for interactive docs.
+- See `API_REFERENCE.md` for a route-by-route summary grouped by area (voice, telephony, Twilio, CRM, owner, admin, reminders, retention, widget).
+- Twilio voice streaming: set `TWILIO_STREAMING_ENABLED=true` and `TWILIO_STREAM_BASE_URL` (use your prod/staging host; dev stubs default to `wss://stream.stub.local/v1/twilio/voice-stream`).
+- Intent thresholds: set `NLU_INTENT_THRESHOLD` (0–1, default 0.35) or per-tenant `intent_threshold` to tighten/loosen assistant intent gating.
 
 5. **Try self-service signup & onboarding (optional)**
    - Enable `ALLOW_SELF_SIGNUP=true` in your backend environment.

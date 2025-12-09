@@ -82,6 +82,31 @@ def init_db() -> None:
 
     Base.metadata.create_all(bind=engine)
 
+    # Minimal, best-effort schema patch for Postgres deployments where new columns
+    # were added after the initial baseline. Avoids startup failures when the
+    # database schema lags behind the current model.
+    try:  # pragma: no cover - exercised in Cloud Run only
+        if not str(engine.url).startswith("sqlite"):
+            with engine.connect() as conn:
+                result = conn.exec_driver_sql(
+                    """
+                    SELECT column_name
+                    FROM information_schema.columns
+                    WHERE table_name='businesses'
+                """
+                )
+                cols = {row[0] for row in result}
+                if "twilio_phone_number" not in cols:
+                    conn.exec_driver_sql(
+                        "ALTER TABLE businesses "
+                        "ADD COLUMN IF NOT EXISTS twilio_phone_number VARCHAR(255)"
+                    )
+                conn.commit()
+    except Exception:
+        logging.getLogger(__name__).warning(
+            "db_schema_patch_postgres_failed", exc_info=True
+        )
+
     # Lightweight, best-effort schema migration for new Business columns when
     # using SQLite in dev/test. This avoids manual migrations while keeping
     # production-friendly behaviour on other databases.

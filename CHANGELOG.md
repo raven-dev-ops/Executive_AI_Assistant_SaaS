@@ -28,6 +28,7 @@ Release notes here summarize work that implements or documents the design descri
 - Owner dashboard polish: quick actions + plan badge, data-strip status pills, intent/voice chips; conversation & callback cards gained client-side filters (search/channel/status), newest/oldest sorting, live summaries, CSV/phone copy shortcuts, and “last updated” stamps for schedule/callbacks/conversations/service metrics.
 - Email delivery now supports Gmail (per-tenant OAuth) and SendGrid providers with retry/backoff, configuration validation, and stubbed fallbacks.
 - Google Calendar: per-tenant OAuth tokens are used for availability/event writes, refreshed and persisted when needed; added `/v1/calendar/google/webhook` to sync inbound updates/cancellations into stored appointments with stub fallback.
+- QuickBooks: OAuth token exchanges/refresh persisted per tenant; `/v1/integrations/qbo/sync` now pushes customers + sales receipts (with retry/backoff) when credentials are configured, and returns stubbed status otherwise.
 - Twilio voice streaming now enqueues missed/partial calls into the callback queue, sends owner alerts, and includes signature validation tests for voice and status webhooks.
 
 

@@ -1129,6 +1129,22 @@ def download_business_usage_csv() -> Response:
     )
 
 
+@router.get("/businesses/{business_id}", response_model=BusinessResponse)
+def get_business(business_id: str) -> BusinessResponse:
+    """Fetch a single business by ID (admin scope)."""
+    session = _get_db_session()
+    try:
+        row = session.get(BusinessDB, business_id)
+        if row is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Business not found",
+            )
+        return _business_to_response(row)
+    finally:
+        session.close()
+
+
 @router.get("/environment", response_model=AdminEnvironmentResponse)
 def get_admin_environment() -> AdminEnvironmentResponse:
     """Return a simple environment label for the admin dashboard.

@@ -173,6 +173,22 @@ class InMemoryAppointmentRepository:
     def get(self, appointment_id: str) -> Optional[Appointment]:
         return self._by_id.get(appointment_id)
 
+    def find_by_calendar_event(
+        self, calendar_event_id: str, *, business_id: str | None = None
+    ) -> Optional[Appointment]:
+        """Return the first appointment matching a calendar_event_id for a tenant."""
+        if business_id:
+            ids = self._by_business.get(business_id, [])
+            for appt_id in ids:
+                appt = self._by_id.get(appt_id)
+                if appt and getattr(appt, "calendar_event_id", None) == calendar_event_id:
+                    return appt
+        else:
+            for appt in self._by_id.values():
+                if getattr(appt, "calendar_event_id", None) == calendar_event_id:
+                    return appt
+        return None
+
     def update(
         self,
         appointment_id: str,

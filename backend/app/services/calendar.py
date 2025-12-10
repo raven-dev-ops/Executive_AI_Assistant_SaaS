@@ -259,6 +259,21 @@ class CalendarService:
         try:
             if creds and getattr(creds, "expired", False):
                 creds.refresh(Request())
+                # Persist refreshed tokens so subsequent requests stay valid.
+                expiry = getattr(creds, "expiry", None)
+                expires_in = 3600
+                if expiry:
+                    try:
+                        expires_in = max(60, int((expiry - datetime.now(UTC)).total_seconds()))
+                    except Exception:
+                        expires_in = 3600
+                oauth_store.save_tokens(
+                    "gcalendar",
+                    business_id,
+                    access_token=creds.token,
+                    refresh_token=creds.refresh_token or tok.refresh_token,
+                    expires_in=expires_in,
+                )
             return build("calendar", "v3", credentials=creds, cache_discovery=False)
         except Exception:
             # If refresh fails, fall back to stored tokens and stub/service account.
@@ -611,6 +626,63 @@ class CalendarService:
             return True
         except HttpError:
             return False
+
+    async def handle_inbound_update(
+        self,
+        *,
+        business_id: str | None,
+        event_id: str,
+        status: str | None = None,
+        start: str | None = None,
+        end: str | None = None,
+        summary: str | None = None,
+        description: str | None = None,
+    ) -> bool:
+        """Handle an inbound calendar update/cancellation notification.
+
+        This is a best-effort sync path that updates the stored appointment
+        matching the given calendar_event_id; when no appointment is found we
+        return False but do not error.
+        """
+        from ..repositories import appointments_repo  # local import
+
+        appt = appointments_repo.find_by_calendar_event(
+            event_id, business_id=business_id
+        )
+        if not appt:
+            return False
+
+        start_dt = None
+        end_dt = None
+        if start:
+            try:
+                start_dt = datetime.fromisoformat(start.replace("Z", "+00:00"))
+            except Exception:
+                start_dt = None
+        if end:
+            try:
+                end_dt = datetime.fromisoformat(end.replace("Z", "+00:00"))
+            except Exception:
+                end_dt = None
+
+        updates = {}
+        if start_dt:
+            updates["start_time"] = start_dt
+        if end_dt:
+            updates["end_time"] = end_dt
+        if description is not None:
+            updates["description"] = description
+        if summary is not None:
+            updates["service_type"] = summary
+
+        cancelled = status and status.lower() in {"cancelled", "canceled", "declined"}
+        if cancelled:
+            updates["status"] = "CANCELLED"
+            updates["job_stage"] = "Cancelled"
+
+        if updates:
+            appointments_repo.update(appt.id, **updates)
+        return True
 
     async def delete_event(
         self,

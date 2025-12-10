@@ -24,6 +24,7 @@ from .routers import (
     owner,
     owner_assistant,
     owner_export,
+    calendar_integration,
     public_signup,
     reminders,
     retention,
@@ -274,6 +275,9 @@ def create_app() -> FastAPI:
     app.include_router(contacts_import.router, prefix="/v1/contacts", tags=["contacts"])
     app.include_router(
         qbo_integration.router, prefix="/v1/integrations/qbo", tags=["integrations"]
+    )
+    app.include_router(
+        calendar_integration.router, prefix="/v1/calendar", tags=["calendar"]
     )
     app.include_router(billing.router, prefix="/v1/billing", tags=["billing"])
     app.include_router(auth_accounts.router, prefix="/v1/auth", tags=["auth"])

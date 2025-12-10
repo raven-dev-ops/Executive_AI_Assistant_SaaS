@@ -1,1 +1,1 @@
-from . import telephony, voice, business_admin  # noqa: F401
+from . import telephony, voice, business_admin, calendar_integration  # noqa: F401

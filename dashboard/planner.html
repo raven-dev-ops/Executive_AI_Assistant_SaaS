@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Investor Planner Dashboard</title>
+  <style>
+    :root {
+      --bg: #f8fafc;
+      --card: #ffffff;
+      --text: #0f172a;
+      --muted: #475569;
+      --accent: #4f46e5;
+      --border: #e2e8f0;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 1.25rem 1.5rem;
+      background: var(--card);
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    .title {
+      font-size: 1.1rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.35rem 0.7rem;
+      border-radius: 999px;
+      background: #eef2ff;
+      color: #312e81;
+      font-weight: 600;
+      border: 1px solid #c7d2fe;
+      font-size: 0.85rem;
+    }
+    .actions {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .btn {
+      border: 1px solid var(--border);
+      background: var(--card);
+      color: var(--text);
+      padding: 0.6rem 0.9rem;
+      border-radius: 10px;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: none;
+      transition: all 0.15s ease;
+    }
+    .btn.primary {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+      box-shadow: 0 10px 30px rgba(79, 70, 229, 0.15);
+    }
+    .btn:hover { transform: translateY(-1px); }
+    .wrapper {
+      max-width: 1280px;
+      margin: 1.25rem auto;
+      padding: 0 1rem 1.5rem;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 1rem;
+      box-shadow: 0 8px 30px rgba(15, 23, 42, 0.04);
+    }
+    iframe {
+      width: 100%;
+      height: calc(100vh - 180px);
+      border: none;
+      border-radius: 12px;
+      background: #fff;
+    }
+    .notice {
+      color: var(--muted);
+      font-size: 0.95rem;
+      margin: 0.6rem 0 1rem;
+    }
+    @media (max-width: 640px) {
+      header { flex-direction: column; align-items: flex-start; gap: 0.75rem; }
+      .actions { width: 100%; }
+      .btn { width: 100%; text-align: center; }
+      iframe { height: calc(100vh - 220px); }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="title">
+      Investor Planner
+      <span class="pill">AI Telephony Executive Assistant</span>
+    </div>
+    <div class="actions">
+      <a class="btn" href="/dashboard/index.html">Owner Dashboard</a>
+      <a class="btn" href="/dashboard/admin.html">Admin Dashboard</a>
+      <a class="btn primary" href="/planner" target="_blank" rel="noopener">Open /planner</a>
+    </div>
+  </header>
+
+  <div class="wrapper">
+    <div class="card">
+      <div class="notice">
+        The embedded view below renders the latest PLANNER.md content from <code>/planner</code>. Open in a new tab if you prefer full-screen reading or to share the link directly with investors.
+      </div>
+      <iframe src="/planner" title="Investor Planner"></iframe>
+    </div>
+  </div>
+</body>
+</html>

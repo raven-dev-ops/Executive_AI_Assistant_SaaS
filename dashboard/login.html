@@ -42,6 +42,24 @@
         margin: 0.35rem 0 1rem 0;
         color: #475569;
       }
+      .help-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 0.6rem; }
+      .help-item {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.75rem;
+        padding: 0.7rem 0.85rem;
+        border-radius: 12px;
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+      }
+      .help-item strong { color: #0f172a; }
+      .help-item .muted { font-size: 0.85rem; }
+      .help-link {
+        color: #2563eb;
+        font-weight: 700;
+        text-decoration: none;
+      }
       .logo-mark {
         width: 48px;
         height: 48px;
@@ -242,6 +260,33 @@
           <button class="button" type="submit">Accept invite & Login</button>
           <div id="invite-status" class="status" role="status" aria-live="polite"></div>
         </form>
+      </div>
+      <div class="panel">
+        <h1 style="margin-bottom: 0.25rem;">Need help?</h1>
+        <p style="margin-bottom: 0.75rem;">Quick links to unblock sign-in or onboarding.</p>
+        <ul class="help-list">
+          <li class="help-item">
+            <div>
+              <strong>Password reset</strong>
+              <div class="muted">Send a reset from the owner dashboard.</div>
+            </div>
+            <a class="help-link" href="../WIKI.md#password-reset" target="_blank" rel="noopener noreferrer">Open</a>
+          </li>
+          <li class="help-item">
+            <div>
+              <strong>Invite issues</strong>
+              <div class="muted">Validate tokens & expiration.</div>
+            </div>
+            <a class="help-link" href="../WIKI.md#invites" target="_blank" rel="noopener noreferrer">Check</a>
+          </li>
+          <li class="help-item">
+            <div>
+              <strong>Tenant & roles</strong>
+              <div class="muted">Confirm business ID and role scopes.</div>
+            </div>
+            <a class="help-link" href="../README.md#troubleshooting" target="_blank" rel="noopener noreferrer">Read</a>
+          </li>
+        </ul>
       </div>
     </div>
 

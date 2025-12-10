@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
@@ -92,6 +92,56 @@
       .progress-wrap { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1rem; }
       .progress-bar { flex: 1; height: 8px; border-radius: 999px; background: #e2e8f0; overflow: hidden; }
       .progress-bar span { display: block; height: 100%; background: linear-gradient(90deg, #2563eb, #22c55e); width: 0%; transition: width 0.3s ease; }
+      .completeness {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 0.9rem;
+        align-items: center;
+        padding: 0.9rem 1rem;
+        border-radius: 14px;
+        border: 1px solid #e2e8f0;
+        background: #f8fafc;
+        margin-bottom: 1rem;
+      }
+      .progress-ring {
+        width: 80px;
+        height: 80px;
+        border-radius: 50%;
+        background: conic-gradient(#22c55e calc(var(--progress, 0) * 1%), #e2e8f0 0);
+        display: grid;
+        place-items: center;
+        position: relative;
+      }
+      .progress-ring::after {
+        content: "";
+        position: absolute;
+        inset: 10px;
+        background: #fff;
+        border-radius: 50%;
+      }
+      .progress-ring-value {
+        position: relative;
+        font-weight: 700;
+        color: #0f172a;
+      }
+      .tip-chips {
+        display: flex;
+        gap: 0.35rem;
+        flex-wrap: wrap;
+        margin-top: 0.35rem;
+      }
+      .tip-chip {
+        padding: 0.25rem 0.6rem;
+        border-radius: 10px;
+        background: #e2e8f0;
+        color: #475569;
+        font-size: 0.8rem;
+        font-weight: 600;
+      }
+      .tip-chip.success {
+        background: #dcfce7;
+        color: #166534;
+      }
       .form-grid {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
@@ -311,6 +361,18 @@
         </div>
         <div class="muted" id="onboarding-business-label">
           Loading tenant profile...
+        </div>
+
+        <div class="completeness" aria-live="polite">
+          <div class="progress-ring" id="profile-progress-ring">
+            <div class="progress-ring-value" id="profile-progress-value">0%</div>
+          </div>
+          <div>
+            <div style="font-weight: 700; color: #0f172a;">Profile completeness</div>
+            <div class="muted" id="completeness-hint">Filling in required details...</div>
+            <div class="progress-bar" aria-hidden="true"><span id="profile-progress-bar" style="width: 0%;"></span></div>
+            <div class="tip-chips" id="completeness-tips"></div>
+          </div>
         </div>
 
         <div class="step-indicator">
@@ -593,12 +655,55 @@
         return !!(onboardingProfile && Array.isArray(onboardingProfile.requirements_missing) && onboardingProfile.requirements_missing.length === 0);
       }
 
+      function computeCompleteness() {
+        const missing = Array.isArray(onboardingProfile?.requirements_missing) ? onboardingProfile.requirements_missing : [];
+        const integrations = Array.isArray(onboardingProfile?.integrations) ? onboardingProfile.integrations : [];
+        const twilioConnected = integrations.some((i) => (i.provider || "").toLowerCase() === "twilio" && i.connected);
+        const calendarConnected = integrations.some((i) => (i.provider || "").toLowerCase() === "gcalendar" && i.connected);
+        const qboConnected = integrations.some((i) => (i.provider || "").toLowerCase() === "quickbooks" && i.connected);
+        const billingReady =
+          onboardingProfile?.billing_status === "active" ||
+          onboardingProfile?.subscription_status === "active" ||
+          onboardingProfile?.billing_ready === true;
+        const tasks = [
+          { key: "terms", label: "Accept Privacy & Terms", done: !missing.includes("privacy_policy") && !missing.includes("terms_of_service") },
+          { key: "profile", label: "Owner contact saved", done: !!(onboardingProfile?.owner_name && onboardingProfile?.owner_email) },
+          { key: "plan", label: "Plan selected", done: !!onboardingProfile?.service_tier },
+          { key: "billing", label: "Billing active", done: billingReady },
+          { key: "calendar", label: "Calendar connected", done: calendarConnected },
+          { key: "voice", label: "Voice/Twilio connected", done: twilioConnected },
+          { key: "accounting", label: "Accounting linked", done: qboConnected },
+        ];
+        const total = tasks.length || 1;
+        const completed = tasks.filter((t) => t.done).length;
+        const percent = Math.round((completed / total) * 100);
+        return { percent, tasks };
+      }
+
+      function updateCompletenessUI() {
+        const ring = $("profile-progress-ring");
+        const value = $("profile-progress-value");
+        const bar = $("profile-progress-bar");
+        const hint = $("completeness-hint");
+        const tips = $("completeness-tips");
+        if (!ring || !value || !bar || !hint || !tips) return;
+        const { percent, tasks } = computeCompleteness();
+        ring.style.setProperty("--progress", percent);
+        value.textContent = `${percent}%`;
+        bar.style.width = `${percent}%`;
+        const next = tasks.filter((t) => !t.done).slice(0, 3).map((t) => t.label);
+        hint.textContent = next.length ? `Next up: ${next.join(" / ")}` : "Everything ready. You can launch.";
+        tips.innerHTML = next.length
+          ? next.map((label) => `<span class="tip-chip">${label}</span>`).join("")
+          : '<span class="tip-chip success">All onboarding tasks done</span>';
+      }
+
       function hydrateProfileFields() {
         if (!onboardingProfile) return;
         const label = $("onboarding-business-label");
         if (label) {
           const tier = onboardingProfile.service_tier || "unselected";
-          label.textContent = `${onboardingProfile.business_name} (${onboardingProfile.business_id}) — tier: ${tier}`;
+          label.textContent = `${onboardingProfile.business_name} (${onboardingProfile.business_id}) � tier: ${tier}`;
         }
         const ownerNameEl = $("owner-name");
         const ownerEmailEl = $("owner-email");
@@ -641,6 +746,7 @@
             setStep(target);
           }
         }
+        updateCompletenessUI();
       }
 
       
@@ -830,6 +936,7 @@
             return;
           }
           onboardingProfile = await res.json();
+          updateCompletenessUI();
           setStatus("step1-status", "Saved.", "success");
           setStep(2);
         } catch (err) {
@@ -865,6 +972,7 @@
             return;
           }
           onboardingProfile = await res.json();
+          updateCompletenessUI();
           setStatus("step2-status", "Saved.", "success");
           setStep(3);
         } catch (err) {
@@ -907,6 +1015,7 @@
             return;
           }
           onboardingProfile = await res.json();
+          updateCompletenessUI();
           setStatus("step3-status", "Plan saved.", "success");
           setStep(4);
         } catch (err) {
@@ -942,6 +1051,7 @@
           onboardingProfile = await res.json();
           setStatus("step4-status", "Integration status updated.", "success");
           renderIntegrations();
+          updateCompletenessUI();
         } catch (err) {
           console.error("Error updating integrations", err);
           setStatus("step4-status", "Network error while updating.", "error");
@@ -964,6 +1074,7 @@
           onboardingProfile = await res.json();
           setStatus("step5-status", "Voice saved.", "success");
           renderVoices();
+          updateCompletenessUI();
         } catch (err) {
           console.error("Error saving voice", err);
           setStatus("step5-status", "Network error while saving voice.", "error");
@@ -985,6 +1096,7 @@
             }
             onboardingProfile = await res.json();
             setStatus("step5-status", "Onboarding complete. You can now open the owner dashboard.", "success");
+            updateCompletenessUI();
           })
           .catch(() => {
             setStatus("step5-status", "Network error while finishing.", "error");

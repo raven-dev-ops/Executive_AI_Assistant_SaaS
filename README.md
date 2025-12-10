@@ -56,6 +56,13 @@ To run the backend and dashboards locally:
    - Open `chat/index.html` to load the installable chat experience (add it to your home screen for offline access).
    - The PWA caches core assets, queues chat sends when offline via Background Sync, and reuses your `X-API-Key` or `X-Widget-Token` from the input fields.
 
+Dashboard productivity tips
+---------------------------
+- Use the **quick actions** row atop `dashboard/index.html` to jump to billing, integrations, invites, chat, and onboarding.
+- Status strip shows plan + health; “last updated” stamps now appear on schedule, callbacks, conversations, and service metrics.
+- **Conversations**: filter by customer/outcome, channel (voice/SMS/chat), sort newest/oldest, and see live totals/channel/booked summary.
+- **Callbacks**: filter by phone/reason and status, sort newest/oldest, copy phone numbers inline, and download CSV for follow-up lists.
+
 Secret Management & Safety
 --------------------------
 

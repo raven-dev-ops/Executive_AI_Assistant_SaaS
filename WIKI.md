@@ -31,6 +31,10 @@ the Bristol Plumbing PDFs and the RavDevOps engineering whitepaper.
   - "Kansas City's Tankless Water Heater Expert."
   - "Local & trusted" in Johnson County with strong word-of-mouth referrals.
 
+- **Recent dashboard updates**
+  - Owner dashboard now has quick actions + plan/status strip, and "last updated" stamps on schedule, callbacks, conversations, and service metrics.
+  - Conversations and callbacks gained filters (search/channel/status), newest/oldest sorting, live summaries, and clipboard/CSV helpers for faster follow-up.
+
 
 2. Personas & Users
 -------------------

@@ -459,112 +459,101 @@ async def twilio_voice(
                     if status_val not in {"SCHEDULED", "PENDING_FOLLOWUP", "COMPLETED"}:
                         is_partial_lead = True
                 sessions.session_store.end(link.session_id)
-            status_lower = CallStatus.lower()
-            if status_lower in missed_statuses or is_partial_lead:
-                from ..metrics import CallbackItem, metrics as _metrics  # local import
-                from ..services.sms import sms_service  # local import to avoid cycles
-                from ..business_config import (  # local import
-                    get_language_for_business as _get_language_for_business,
-                )
+            from ..metrics import CallbackItem, metrics as _metrics  # local import
+            from ..services.sms import sms_service  # local import to avoid cycles
+            from ..business_config import (  # local import
+                get_language_for_business as _get_language_for_business,
+            )
 
-                phone = From or ""
-                if phone:
-                    now = datetime.now(UTC)
-                    queue = _metrics.callbacks_by_business.setdefault(business_id, {})
-                    existing = queue.get(phone)
-                    lead_source = getattr(session, "lead_source", None)
-                    if existing is None:
-                        reason = "PARTIAL_INTAKE" if is_partial_lead else "MISSED_CALL"
-                        queue[phone] = CallbackItem(
-                            phone=phone,
-                            first_seen=now,
-                            last_seen=now,
-                            count=1,
-                            channel="phone",
-                            lead_source=lead_source,
-                            reason=reason,
+            phone = From or CallSid or ""
+            now = datetime.now(UTC)
+            queue = _metrics.callbacks_by_business.setdefault(business_id, {})
+            existing = queue.get(phone)
+            lead_source = getattr(session, "lead_source", None)
+            reason_code = "PARTIAL_INTAKE" if is_partial_lead else "MISSED_CALL"
+            if existing is None:
+                queue[phone] = CallbackItem(
+                    phone=phone,
+                    first_seen=now,
+                    last_seen=now,
+                    count=1,
+                    channel="phone",
+                    lead_source=lead_source,
+                    reason=reason_code,
+                )
+            else:
+                existing.last_seen = now
+                existing.count += 1
+                if lead_source:
+                    existing.lead_source = lead_source
+                if is_partial_lead:
+                    existing.reason = "PARTIAL_INTAKE"
+                if getattr(existing, "status", "PENDING").upper() != "PENDING":
+                    existing.status = "PENDING"
+                    existing.last_result = None
+
+            # Notify owner about missed/partial calls.
+            reason = "Partial intake" if is_partial_lead else "Missed call"
+            when_str = now.strftime("%Y-%m-%d %H:%M UTC")
+            owner_message = f"{reason} from {phone} at {when_str}."
+            if owner_phone:
+                try:
+                    await sms_service.notify_owner(
+                        owner_message,
+                        business_id=business_id,
+                    )
+                except Exception:
+                    logger.warning(
+                        "owner_notify_failed",
+                        exc_info=True,
+                        extra={"business_id": business_id, "reason": reason},
+                    )
+            if owner_email:
+                try:
+                    await email_service.notify_owner(
+                        subject="Missed call alert",
+                        body=owner_message,
+                        business_id=business_id,
+                        owner_email=owner_email,
+                    )
+                except Exception:
+                    logger.warning(
+                        "owner_email_notify_failed",
+                        exc_info=True,
+                        extra={"business_id": business_id, "reason": reason},
+                    )
+
+            # For partial leads where the assistant answered but the caller
+            # dropped before intake completed, send a gentle SMS asking
+            # for a quick summary so the team can follow up.
+            if is_partial_lead and phone:
+                # Best-effort check for SMS opt-out.
+                customer = customers_repo.get_by_phone(phone, business_id=business_id)
+                if not customer or not getattr(customer, "sms_opt_out", False):
+                    language_code = _get_language_for_business(business_id)
+                    business_name = conversation.DEFAULT_BUSINESS_NAME
+                    if business_row is not None and getattr(
+                        business_row, "name", None
+                    ):
+                        business_name = business_row.name  # type: ignore[assignment]
+                    if language_code == "es":
+                        body = (
+                            f"Sentimos no haber podido completar tu llamada con {business_name}. "
+                            "Si aun necesitas ayuda, respóndenos con un breve resumen del problema "
+                            "y te contactaremos."
                         )
                     else:
-                        existing.last_seen = now
-                        existing.count += 1
-                        if lead_source:
-                            existing.lead_source = lead_source
-                        # If this latest event is a partial-intake drop, upgrade
-                        # the reason so the owner can see it clearly.
-                        if is_partial_lead:
-                            existing.reason = "PARTIAL_INTAKE"
-                        # A new missed or partial call should re-open the callback
-                        # if it was previously resolved.
-                        if getattr(existing, "status", "PENDING").upper() != "PENDING":
-                            existing.status = "PENDING"
-                            existing.last_result = None
-
-                    # Notify owner about missed/partial calls.
-                    reason = "Partial intake" if is_partial_lead else "Missed call"
-                    when_str = now.strftime("%Y-%m-%d %H:%M UTC")
-                    owner_message = f"{reason} from {phone} at {when_str}."
-                    if owner_phone:
-                        try:
-                            await sms_service.notify_owner(
-                                owner_message,
-                                business_id=business_id,
-                            )
-                        except Exception:
-                            logger.warning(
-                                "owner_notify_failed",
-                                exc_info=True,
-                                extra={"business_id": business_id, "reason": reason},
-                            )
-                    if owner_email:
-                        try:
-                            await email_service.notify_owner(
-                                subject="Missed call alert",
-                                body=owner_message,
-                                business_id=business_id,
-                                owner_email=owner_email,
-                            )
-                        except Exception:
-                            logger.warning(
-                                "owner_email_notify_failed",
-                                exc_info=True,
-                                extra={"business_id": business_id, "reason": reason},
-                            )
-
-                    # For partial leads where the assistant answered but the caller
-                    # dropped before intake completed, send a gentle SMS asking
-                    # for a quick summary so the team can follow up.
-                    if is_partial_lead:
-                        # Best-effort check for SMS opt-out.
-                        customer = None
-                        if phone:
-                            customer = customers_repo.get_by_phone(
-                                phone, business_id=business_id
-                            )
-                        if not customer or not getattr(customer, "sms_opt_out", False):
-                            language_code = _get_language_for_business(business_id)
-                            business_name = conversation.DEFAULT_BUSINESS_NAME
-                            if business_row is not None and getattr(
-                                business_row, "name", None
-                            ):
-                                business_name = business_row.name  # type: ignore[assignment]
-                            if language_code == "es":
-                                body = (
-                                    f"Sentimos no haber podido completar tu llamada con {business_name}. "
-                                    "Si aun necesitas ayuda, respóndenos con un breve resumen del problema "
-                                    "y te contactaremos."
-                                )
-                            else:
-                                body = (
-                                    f"Sorry we couldn't finish your call with {business_name}. "
-                                    "If you still need help, please reply with a quick summary of the issue "
-                                    "and we'll follow up."
-                                )
-                            # Fire-and-forget SMS; errors are handled inside sms_service.
-                            await sms_service.notify_customer(
-                                phone,
-                                body,
-                                business_id=business_id,
-                            )
+                        body = (
+                            f"Sorry we couldn't finish your call with {business_name}. "
+                            "If you still need help, please reply with a quick summary of the issue "
+                            "and we'll follow up."
+                        )
+                    # Fire-and-forget SMS; errors are handled inside sms_service.
+                    await sms_service.notify_customer(
+                        phone,
+                        body,
+                        business_id=business_id,
+                    )
             return Response(content="<Response/>", media_type="text/xml")
 
         # Get or create an internal session for this Twilio call.
@@ -996,11 +985,30 @@ async def twilio_voice_assistant(
         form_params["SpeechResult"] = SpeechResult
     await _maybe_verify_twilio_signature(request, form_params)
 
-    # Handle call completion quickly.
+    # Handle call completion quickly and enqueue a callback follow-up.
     if CallStatus and CallStatus.lower() in {"completed", "canceled", "busy", "failed", "no-answer"}:
         link = twilio_state_store.clear_call_session(CallSid)
         if link:
             sessions.session_store.end(link.session_id)
+        # Record missed/partial call for owner follow-up.
+        phone = From or CallSid or ""
+        queue = metrics.callbacks_by_business.setdefault(business_id, {})
+        existing = queue.get(phone)
+        if existing is None:
+            queue[phone] = CallbackItem(
+                phone=phone,
+                first_seen=datetime.now(UTC),
+                last_seen=datetime.now(UTC),
+                count=1,
+                channel="phone",
+                reason="MISSED_CALL",
+            )
+        else:
+            existing.last_seen = datetime.now(UTC)
+            existing.count += 1
+            if getattr(existing, "status", "PENDING").upper() != "PENDING":
+                existing.status = "PENDING"
+                existing.last_result = None
         return Response(content="<Response/>", media_type="text/xml")
 
     # Resolve language for <Say>.

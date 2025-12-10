@@ -850,6 +850,41 @@ def test_twilio_voice_persists_session_and_conversation_messages():
     assert any(m.text == "I need help with a leak" for m in conv_after.messages)
 
 
+def test_twilio_voice_assistant_handles_partial_and_alerts_owner(monkeypatch):
+    metrics.callbacks_by_business.clear()
+    call_sid = "CA_BRIDGE1"
+    phone = "+15551234567"
+
+    resp1 = client.post(
+        "/twilio/voice-assistant",
+        data={"CallSid": call_sid, "From": phone, "CallStatus": "in-progress"},
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
+    assert resp1.status_code == 200
+
+    resp2 = client.post(
+        "/twilio/voice-assistant",
+        data={
+            "CallSid": call_sid,
+            "From": phone,
+            "CallStatus": "in-progress",
+            "SpeechResult": "I need to book an appointment",
+        },
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
+    assert resp2.status_code == 200
+
+    # Simulate caller drop/failure before completion to trigger partial-intake handling.
+    resp3 = client.post(
+        "/twilio/voice-assistant",
+        data={"CallSid": call_sid, "From": phone, "CallStatus": "failed"},
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
+    assert resp3.status_code == 200
+
+    assert resp3.text.strip() == "<Response/>"
+
+
 @pytest.mark.skipif(
     not SQLALCHEMY_AVAILABLE or SessionLocal is None,
     reason="Suspended tenant checks require database support",

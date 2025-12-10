@@ -29,6 +29,7 @@ from .routers import (
     public_signup,
     reminders,
     retention,
+    planner,
     qbo_integration,
     auth_accounts,
     telephony,
@@ -296,6 +297,7 @@ def create_app() -> FastAPI:
     app.include_router(business_admin.router, prefix="/v1/admin", tags=["admin"])
     app.include_router(twilio_integration.router, prefix="/twilio", tags=["twilio"])
     app.include_router(twilio_integration.router, prefix="/v1/twilio", tags=["twilio"])
+    app.include_router(planner.router, tags=["planner"])
     app.include_router(public_signup.router, tags=["public-signup"])
     # Fallback endpoint without prefix to satisfy external callback requirements.
     app.add_api_route(

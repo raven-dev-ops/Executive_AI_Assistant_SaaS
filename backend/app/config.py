@@ -40,7 +40,9 @@ class SpeechSettings(BaseModel):
 
 class NluSettings(BaseModel):
     intent_provider: str = os.getenv("NLU_PROVIDER", "heuristic")
-    intent_confidence_threshold: float = float(os.getenv("NLU_INTENT_THRESHOLD", "0.4"))
+    intent_confidence_threshold: float = float(
+        os.getenv("NLU_INTENT_THRESHOLD") or "0.4"
+    )
 
 
 class OAuthSettings(BaseModel):

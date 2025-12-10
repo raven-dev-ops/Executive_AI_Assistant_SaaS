@@ -106,26 +106,113 @@
     }
   </style>
 </head>
-<body>
-  <header>
-    <div class="title">
-      Investor Planner
-      <span class="pill">AI Telephony Executive Assistant</span>
-    </div>
-    <div class="actions">
-      <a class="btn" href="/dashboard/index.html">Owner Dashboard</a>
-      <a class="btn" href="/dashboard/admin.html">Admin Dashboard</a>
-      <a class="btn primary" href="/planner" target="_blank" rel="noopener">Open /planner</a>
-    </div>
-  </header>
-
-  <div class="wrapper">
-    <div class="card">
-      <div class="notice">
-        The embedded view below renders the latest PLANNER.md content from <code>/planner</code>. Open in a new tab if you prefer full-screen reading or to share the link directly with investors.
+  <body>
+    <header>
+      <div class="title">
+        Investor Planner
+        <span class="pill">AI Telephony Executive Assistant</span>
       </div>
-      <iframe src="/planner" title="Investor Planner"></iframe>
+      <div class="actions">
+        <a class="btn" href="/dashboard/index.html">Owner Dashboard</a>
+        <a class="btn" href="/dashboard/admin.html">Admin Dashboard</a>
+        <a class="btn primary" href="/planner" target="_blank" rel="noopener">Open /planner</a>
+      </div>
+    </header>
+
+    <div class="wrapper">
+      <div class="layout">
+        <aside class="sidebar">
+          <div class="sidebar-header">
+            <div class="sidebar-title">Contents</div>
+            <div class="sidebar-subtitle">Jump to a section</div>
+          </div>
+          <nav id="toc" class="toc">
+            <div class="notice-small">Loading sections…</div>
+          </nav>
+        </aside>
+        <div class="card content-card">
+          <div class="notice">
+            The embedded view below renders the latest PLANNER.md content from <code>/planner</code>. Use the table of contents to jump between sections or open in a new tab for full-screen reading.
+          </div>
+          <iframe id="planner-frame" src="/planner" title="Investor Planner"></iframe>
+        </div>
+      </div>
     </div>
-  </div>
-</body>
+    <script>
+      (function () {
+        const iframe = document.getElementById("planner-frame");
+        const tocEl = document.getElementById("toc");
+
+        function slugify(text, idx) {
+          return (
+            text
+              .toLowerCase()
+              .replace(/[^a-z0-9]+/g, "-")
+              .replace(/^-+|-+$/g, "") || `section-${idx}`
+          );
+        }
+
+        function buildToc(doc) {
+          const headings = Array.from(doc.querySelectorAll("h1, h2, h3"));
+          if (!headings.length) {
+            tocEl.innerHTML = "<div class='notice-small'>No sections detected.</div>";
+            return;
+          }
+          headings.forEach((h, idx) => {
+            if (!h.id) h.id = slugify(h.textContent || `section-${idx}`, idx);
+          });
+
+          tocEl.innerHTML = headings
+            .filter((h) => ["H1", "H2", "H3"].includes(h.tagName))
+            .map((h) => {
+              const level = h.tagName === "H1" ? 1 : h.tagName === "H2" ? 2 : 3;
+              return `<a class="toc-link level-${level}" data-target="${h.id}">${h.textContent || h.id}</a>`;
+            })
+            .join("");
+
+          tocEl.querySelectorAll(".toc-link").forEach((link) => {
+            link.addEventListener("click", (e) => {
+              e.preventDefault();
+              const targetId = link.getAttribute("data-target");
+              const targetEl = doc.getElementById(targetId);
+              if (targetEl) {
+                targetEl.scrollIntoView({ behavior: "smooth", block: "start" });
+              }
+            });
+          });
+
+          // Highlight active section as you scroll.
+          const observer = new IntersectionObserver(
+            (entries) => {
+              entries.forEach((entry) => {
+                const id = entry.target.id;
+                const link = tocEl.querySelector(`.toc-link[data-target="${id}"]`);
+                if (!link) return;
+                if (entry.isIntersecting) {
+                  tocEl.querySelectorAll(".toc-link").forEach((l) => l.classList.remove("active"));
+                  link.classList.add("active");
+                }
+              });
+            },
+            { root: doc, rootMargin: "0px 0px -70% 0px", threshold: [0, 1] }
+          );
+          headings.forEach((h) => observer.observe(h));
+        }
+
+        iframe.addEventListener("load", () => {
+          try {
+            const doc = iframe.contentDocument;
+            if (doc) {
+              buildToc(doc);
+            } else {
+              tocEl.innerHTML = "<div class='notice-small'>Unable to load planner contents.</div>";
+            }
+          } catch (err) {
+            console.error(err);
+            tocEl.innerHTML = "<div class='notice-small'>Unable to build table of contents.</div>";
+          }
+        });
+      })();
+    </script>
+  </body>
 </html>

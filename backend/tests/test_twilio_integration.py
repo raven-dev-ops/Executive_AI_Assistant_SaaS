@@ -14,6 +14,8 @@ from app.repositories import customers_repo, appointments_repo
 from app.deps import DEFAULT_BUSINESS_ID
 from app.services import conversation
 from app.routers import twilio_integration
+from app.services import twilio_state, sessions
+from app.services.twilio_state import twilio_state_store
 
 
 client = TestClient(app)
@@ -551,6 +553,42 @@ def test_voicemail_notifies_owner(monkeypatch):
     assert resp.status_code == 200
     assert sms_calls, "owner SMS alert should be sent for voicemail"
     assert email_calls, "owner email alert should be sent for voicemail"
+
+
+def test_twilio_voice_session_persists_across_turns():
+    metrics.callbacks_by_business.clear()
+    twilio_state_store.clear_call_session("CALL_PERSIST")
+    # Initial gather start.
+    resp1 = client.post(
+        "/twilio/voice",
+        data={
+            "CallSid": "CALL_PERSIST",
+            "From": "+15550101010",
+            "CallStatus": "in-progress",
+        },
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
+    assert resp1.status_code == 200
+    assert "<Gather" in resp1.text
+
+    # Send a speech turn and ensure we still gather and keep the same session.
+    resp2 = client.post(
+        "/twilio/voice",
+        data={
+            "CallSid": "CALL_PERSIST",
+            "From": "+15550101010",
+            "CallStatus": "in-progress",
+            "SpeechResult": "book an appointment",
+        },
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
+    assert resp2.status_code == 200
+    assert "<Gather" in resp2.text
+    link = twilio_state_store.get_call_session("CALL_PERSIST")
+    assert link is not None
+    session = sessions.session_store.get(link.session_id)
+    assert session is not None
+    assert session.caller_phone == "+15550101010"
 
 
 def _build_twilio_signature(path: str, params: dict[str, str], auth_token: str) -> str:

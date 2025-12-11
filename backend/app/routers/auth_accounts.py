@@ -641,13 +641,13 @@ class ActiveBusinessRequest(BaseModel):
     business_id: str
 
 
-@router.patch("/active-business", response_model=UserResponse)
+@router.patch("/active-business", response_model=TokenResponse)
 def set_active_business(
     payload: ActiveBusinessRequest,
     x_user_id: str | None = Header(default=None, alias="X-User-ID"),
     authorization: str | None = Header(default=None, alias="Authorization"),
-) -> UserResponse:
-    """Update the active business for the current user."""
+) -> TokenResponse:
+    """Update the active business for the current user and issue fresh tokens."""
     user_id, _ = _resolve_user_from_auth(authorization, x_user_id)
     _ensure_business(payload.business_id)
     session = _require_db()
@@ -656,18 +656,12 @@ def set_active_business(
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
         memberships = _get_memberships(session, user.id)
-        _roles_for_business(payload.business_id, memberships)
+        roles = _roles_for_business(payload.business_id, memberships)
         user.active_business_id = payload.business_id
         session.add(user)
         session.commit()
         session.refresh(user)
-        roles = [m.role for m in memberships if m.business_id == payload.business_id]
-        return UserResponse(
-            id=user.id,
-            email=user.email,  # type: ignore[arg-type]
-            name=user.name,
-            active_business_id=user.active_business_id,
-            roles=roles,
-        )
+        settings = get_settings()
+        return _issue_tokens(user, payload.business_id, roles, settings)
     finally:
         session.close()

@@ -2769,6 +2769,34 @@
         <div id="team-table" class="muted">Loading team...</div>
       </div>
 
+      <div class="card" id="audit-card">
+        <div class="card-header">
+          <div>
+            <p class="muted">Team & Roles</p>
+            <h2>Activity Log</h2>
+          </div>
+          <div class="pill muted" id="audit-count-pill">No entries</div>
+        </div>
+
+        <div class="filter-row" style="margin-bottom: 0.5rem;">
+          <select id="audit-actor-filter" aria-label="Filter by actor">
+            <option value="">All actors</option>
+            <option value="dashboard_user">Dashboard user</option>
+            <option value="system">System</option>
+          </select>
+          <select id="audit-method-filter" aria-label="Filter by method">
+            <option value="">All methods</option>
+            <option value="POST">POST</option>
+            <option value="PATCH">PATCH</option>
+            <option value="DELETE">DELETE</option>
+          </select>
+          <input id="audit-path-filter" type="text" placeholder="Filter by path..." aria-label="Filter by path" />
+          <button id="audit-refresh" type="button">Refresh</button>
+        </div>
+
+        <div id="audit-log-content" class="muted">Loading activity...</div>
+      </div>
+
       <div class="card" id="callbacks-card">
 
         <div class="card-header">
@@ -4811,19 +4839,100 @@
 
       async function setActiveBusiness() {
         const input = document.getElementById("active-business-input");
-        const businessId = input?.value?.trim();
-        if (!businessId) return;
+        const requestedBiz = input?.value?.trim();
+        if (!requestedBiz) return;
         try {
           const res = await authorizedFetch("/v1/auth/active-business", {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ business_id: businessId }),
+            body: JSON.stringify({ business_id: requestedBiz }),
           });
-          if (!res.ok) throw new Error(`Unable to set active business (${res.status})`);
+          const data = await res.json();
+          if (!res.ok) throw new Error(data?.detail || `Unable to set active business (${res.status})`);
+          persistSessionFromTokens(data);
+          const nextBiz = data?.user?.active_business_id || requestedBiz;
+          const nextRoles = Array.isArray(data?.user?.roles) ? data.user.roles : userRoles;
+          businessId = nextBiz;
+          localStorage.setItem("owner_business_id", nextBiz);
+          localStorage.setItem("owner_active_business_id", nextBiz);
+          if (nextRoles?.length) userRoles = nextRoles;
+          renderBusinessSwitcher();
+          updateUserUi();
           await loadActiveBusiness();
+          loadTeam();
+          loadInvites();
+          loadAuditLog();
+          refreshAllData();
         } catch (err) {
           console.error(err);
           alert(err?.message || "Unable to set active business.");
+        }
+      }
+
+      async function loadAuditLog() {
+        const container = document.getElementById("audit-log-content");
+        const pill = document.getElementById("audit-count-pill");
+        const actorSelect = document.getElementById("audit-actor-filter");
+        const methodSelect = document.getElementById("audit-method-filter");
+        const pathInput = document.getElementById("audit-path-filter");
+        if (!container) return;
+        if (!hasOwnerPrivileges()) {
+          container.textContent = "Activity log requires owner or admin.";
+          if (pill) {
+            pill.textContent = "Restricted";
+            pill.className = "pill muted";
+          }
+          return;
+        }
+        const params = new URLSearchParams({ limit: "50" });
+        const actor = actorSelect?.value || "";
+        const method = methodSelect?.value || "";
+        const path = pathInput?.value?.trim() || "";
+        if (actor) params.append("actor_type", actor);
+        if (method) params.append("method", method);
+        if (path) params.append("path_contains", path);
+        container.innerHTML = '<div class="loading">Loading activity...</div>';
+        try {
+          const res = await authorizedFetch(`/v1/owner/audit?${params.toString()}`);
+          const data = await res.json();
+          if (!res.ok) {
+            throw new Error(data?.detail || `Unable to load activity (${res.status})`);
+          }
+          const events = Array.isArray(data) ? data : [];
+          if (!events.length) {
+            container.innerHTML = '<div class="muted">No recent activity.</div>';
+            if (pill) {
+              pill.textContent = "0 entries";
+              pill.className = "pill muted";
+            }
+            return;
+          }
+          container.innerHTML = events
+            .map(
+              (ev) => `
+              <div class="metric-row" style="align-items:flex-start; gap:0.5rem;">
+                <div style="min-width:90px; font-weight:600;">${escapeHtml(ev.method || "")}</div>
+                <div style="flex:1;">
+                  <div style="font-weight:600;">${escapeHtml(ev.path || "")}</div>
+                  <div class="muted" style="font-size:0.8rem;">
+                    ${new Date(ev.created_at).toLocaleString()} · ${escapeHtml(ev.actor_type || "user")} · Status ${ev.status_code ?? ""}
+                  </div>
+                </div>
+              </div>
+            `
+            )
+            .join("");
+          if (pill) {
+            pill.textContent = `${events.length} entr${events.length === 1 ? "y" : "ies"}`;
+            pill.className = "pill connected";
+          }
+        } catch (err) {
+          console.error(err);
+          container.textContent = err?.message || "Unable to load activity.";
+          if (pill) {
+            pill.textContent = "Error";
+            pill.className = "pill muted";
+          }
         }
       }
 
@@ -6569,6 +6678,8 @@
         loadConversations();
 
         loadInvites();
+
+        loadAuditLog();
 
         loadCallbacks();
 
@@ -8732,6 +8843,10 @@ async function loadTeam() {
         document.getElementById("refresh-callbacks")?.addEventListener("click", loadCallbacks);
         document.getElementById("download-callbacks")?.addEventListener("click", downloadCallbacksCsv);
         document.getElementById("set-active-business")?.addEventListener("click", setActiveBusiness);
+        document.getElementById("audit-refresh")?.addEventListener("click", loadAuditLog);
+        document.getElementById("audit-actor-filter")?.addEventListener("change", loadAuditLog);
+        document.getElementById("audit-method-filter")?.addEventListener("change", loadAuditLog);
+        document.getElementById("audit-path-filter")?.addEventListener("change", loadAuditLog);
 
       }
 
@@ -8869,6 +8984,8 @@ async function loadTeam() {
         loadActiveBusiness();
 
         loadInvites();
+
+        loadAuditLog();
 
         loadCallbacks();
 

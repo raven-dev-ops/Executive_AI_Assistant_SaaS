@@ -320,6 +320,16 @@ class OwnerInvite(BaseModel):
     invite_token: str | None = None
 
 
+class DashboardAuditEvent(BaseModel):
+    id: int
+    created_at: datetime
+    actor_type: str
+    business_id: str | None
+    path: str
+    method: str
+    status_code: int
+
+
 class OwnerInvitesResponse(BaseModel):
     invites: list[OwnerInvite]
 
@@ -607,7 +617,17 @@ def update_callback(
     )
 
 
-@router.get("/users", response_model=OwnerUsersResponse)
+@router.get(
+    "/users",
+    response_model=OwnerUsersResponse,
+    dependencies=[
+        Depends(
+            require_dashboard_role(
+                ["owner", "admin"], allow_anonymous_if_no_token=False
+            )
+        )
+    ],
+)
 def list_business_users(
     business_id: str = Depends(ensure_business_active),
 ) -> OwnerUsersResponse:
@@ -687,6 +707,59 @@ def update_business_user_role(
         )
     finally:
         session_db.close()
+
+
+@router.get(
+    "/audit",
+    response_model=list[DashboardAuditEvent],
+    dependencies=[
+        Depends(
+            require_dashboard_role(
+                ["owner", "admin"], allow_anonymous_if_no_token=False
+            )
+        )
+    ],
+)
+def list_dashboard_audit_events(
+    limit: int = Query(default=50, ge=1, le=200),
+    actor_type: str | None = Query(default=None, description="Filter by actor type"),
+    method: str | None = Query(default=None, description="Filter by HTTP method"),
+    path_contains: str | None = Query(
+        default=None, description="Filter by path substring"
+    ),
+    business_id: str = Depends(ensure_business_active),
+) -> list[DashboardAuditEvent]:
+    """Return recent audit events for this business with basic filtering."""
+    if not (SQLALCHEMY_AVAILABLE and SessionLocal is not None):
+        return []
+    session = SessionLocal()
+    try:
+        query = (
+            session.query(AuditEventDB)
+            .filter(AuditEventDB.business_id == business_id)
+            .order_by(AuditEventDB.created_at.desc())
+        )
+        if actor_type:
+            query = query.filter(AuditEventDB.actor_type == actor_type)
+        if method:
+            query = query.filter(AuditEventDB.method == method)
+        if path_contains:
+            query = query.filter(AuditEventDB.path.ilike(f"%{path_contains}%"))
+        rows = query.limit(limit).all()
+        return [
+            DashboardAuditEvent(
+                id=row.id,
+                created_at=row.created_at,
+                actor_type=row.actor_type,
+                business_id=row.business_id,
+                path=row.path,
+                method=row.method,
+                status_code=row.status_code,
+            )
+            for row in rows
+        ]
+    finally:
+        session.close()
 
 
 class TenantDataDeleteResponse(BaseModel):

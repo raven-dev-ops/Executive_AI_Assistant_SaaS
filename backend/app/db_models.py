@@ -70,6 +70,7 @@ if SQLALCHEMY_AVAILABLE:
         gmail_access_token = Column(Text, nullable=True)  # type: ignore[call-arg]
         gmail_refresh_token = Column(Text, nullable=True)  # type: ignore[call-arg]
         gmail_token_expires_at = Column(DateTime, nullable=True)  # type: ignore[call-arg]
+        owner_email_alerts_enabled = Column(Boolean, nullable=True)  # type: ignore[call-arg]
         qbo_realm_id = Column(String(128), nullable=True)  # type: ignore[call-arg]
         qbo_access_token = Column(Text, nullable=True)  # type: ignore[call-arg]
         qbo_refresh_token = Column(Text, nullable=True)  # type: ignore[call-arg]

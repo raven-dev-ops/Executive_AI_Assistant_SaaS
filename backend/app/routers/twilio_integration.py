@@ -214,6 +214,13 @@ def _format_appointment_time(appt) -> str:
     return when.strftime("%a %b %d at %I:%M %p UTC")
 
 
+def _email_alerts_enabled(business_row: BusinessDB | None) -> bool:
+    if business_row is None:
+        return True
+    val = getattr(business_row, "owner_email_alerts_enabled", None)
+    return True if val is None else bool(val)
+
+
 def _owner_emergency_counts_last_days(business_id: str, days: int) -> tuple[int, int]:
     """Return (total_appointments, emergency_appointments) for the last N days."""
     now = datetime.now(UTC)
@@ -507,7 +514,7 @@ async def twilio_voice(
                         exc_info=True,
                         extra={"business_id": business_id, "reason": reason},
                     )
-            if owner_email:
+            if owner_email and _email_alerts_enabled(business_row):
                 try:
                     await email_service.notify_owner(
                         subject="Missed call alert",
@@ -1725,12 +1732,13 @@ async def twilio_voicemail(
             )
     if owner_email:
         try:
-            await email_service.notify_owner(
-                subject="New voicemail",
-                body=owner_message,
-                business_id=business_id,
-                owner_email=owner_email,
-            )
+            if _email_alerts_enabled(business_row):
+                await email_service.notify_owner(
+                    subject="New voicemail",
+                    body=owner_message,
+                    business_id=business_id,
+                    owner_email=owner_email,
+                )
         except Exception:
             logger.warning(
                 "voicemail_owner_email_failed",

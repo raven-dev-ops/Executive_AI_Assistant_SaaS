@@ -186,14 +186,15 @@ def test_subscription_reminder_sent_when_enforcement_disabled(monkeypatch):
     monkeypatch.delenv("ENFORCE_SUBSCRIPTION", raising=False)
     config.get_settings.cache_clear()
     deps.get_settings.cache_clear()
+    # Clear reminder cache to avoid previous tests blocking notifications.
+    from app.services import subscription as subscription_service
+    subscription_service._reminder_cache.clear()  # type: ignore[attr-defined]
 
     sent = []
 
     class DummyEmail:
         async def notify_owner(self, subject, body, *, business_id, owner_email):
             sent.append((subject, body, business_id, owner_email))
-
-    from app.services import subscription as subscription_service
 
     monkeypatch.setattr(subscription_service, "email_service", DummyEmail())
 

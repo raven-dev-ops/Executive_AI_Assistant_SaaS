@@ -7728,6 +7728,13 @@
 
           ownerServiceTier = data && typeof data.service_tier === "string" ? data.service_tier : null;
 
+          if (typeof data?.owner_email_alerts_enabled === "boolean") {
+            emailAlertsEnabled = data.owner_email_alerts_enabled;
+            localStorage.setItem("owner_email_alerts", emailAlertsEnabled ? "true" : "false");
+            const toggle = document.getElementById("email-alerts-toggle");
+            if (toggle) toggle.checked = emailAlertsEnabled;
+          }
+
           const labelEl = document.getElementById("owner-plan-label");
 
           if (labelEl) {
@@ -7750,6 +7757,26 @@
 
         }
 
+      }
+
+      async function saveEmailAlertsPreference(enabled) {
+        try {
+          const res = await authorizedFetch("/v1/owner/onboarding/profile", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ owner_email_alerts_enabled: !!enabled }),
+          });
+          if (!res.ok) {
+            throw new Error(`Unable to save email alerts (${res.status})`);
+          }
+          emailAlertsEnabled = !!enabled;
+          localStorage.setItem("owner_email_alerts", emailAlertsEnabled ? "true" : "false");
+        } catch (err) {
+          console.error(err);
+          const toggle = document.getElementById("email-alerts-toggle");
+          if (toggle) toggle.checked = emailAlertsEnabled;
+          alert(err?.message || "Unable to update email alerts preference.");
+        }
       }
 
 
@@ -8877,8 +8904,7 @@ async function loadTeam() {
         document.getElementById("audit-method-filter")?.addEventListener("change", loadAuditLog);
         document.getElementById("audit-path-filter")?.addEventListener("change", loadAuditLog);
         document.getElementById("email-alerts-toggle")?.addEventListener("change", (e) => {
-          emailAlertsEnabled = !!e.target.checked;
-          localStorage.setItem("owner_email_alerts", emailAlertsEnabled ? "true" : "false");
+          saveEmailAlertsPreference(!!e.target.checked);
         });
 
       }

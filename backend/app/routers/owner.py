@@ -1505,6 +1505,7 @@ def _business_onboarding_profile_from_row(
     subscription_current_period_end = getattr(
         row, "subscription_current_period_end", None
     )
+    owner_email_alerts_enabled = getattr(row, "owner_email_alerts_enabled", True)
 
     def _status(attr: str) -> tuple[bool, str]:
         raw = (getattr(row, attr, None) or "").lower()
@@ -1590,6 +1591,7 @@ def _business_onboarding_profile_from_row(
         integrations=integrations,
         profile_complete=profile_complete,
         requirements_missing=requirements_missing,
+        owner_email_alerts_enabled=owner_email_alerts_enabled,
     )
 
 
@@ -1636,6 +1638,7 @@ class OwnerOnboardingProfile(BaseModel):
     integrations: list[OwnerIntegrationStatus]
     profile_complete: bool = False
     requirements_missing: list[str] = []
+    owner_email_alerts_enabled: bool | None = True
 
 
 @router.get("/onboarding/profile", response_model=OwnerOnboardingProfile)
@@ -1657,6 +1660,7 @@ def owner_onboarding_profile(
             terms_accepted=False,
             privacy_accepted=False,
             tts_voice=get_voice_for_business(business_id),
+            owner_email_alerts_enabled=True,
             twilio_phone_number=None,
             onboarding_step=None,
             onboarding_completed=False,
@@ -1718,6 +1722,7 @@ class OwnerOnboardingUpdateRequest(BaseModel):
     accept_terms: bool | None = None
     accept_privacy: bool | None = None
     tts_voice: str | None = None
+    owner_email_alerts_enabled: bool | None = None
     onboarding_step: str | None = Field(
         default=None,
         description="Current onboarding step (e.g. 'profile', 'data', 'ai', 'complete').",
@@ -1761,6 +1766,8 @@ def owner_onboarding_update(
             row.owner_email = str(payload.owner_email)
         if payload.owner_phone is not None:
             row.owner_phone = payload.owner_phone
+        if payload.owner_email_alerts_enabled is not None:
+            row.owner_email_alerts_enabled = bool(payload.owner_email_alerts_enabled)
         if payload.owner_profile_image_url is not None:
             row.owner_profile_image_url = payload.owner_profile_image_url
         if payload.service_tier is not None:

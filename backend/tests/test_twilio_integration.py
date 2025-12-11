@@ -478,6 +478,7 @@ def test_missed_call_notifies_owner(monkeypatch):
                 session.add(row)
             row.owner_phone = "+15550101010"
             row.owner_email = "owner@example.com"
+            row.owner_email_alerts_enabled = True  # type: ignore[assignment]
             session.commit()
         finally:
             session.close()
@@ -523,6 +524,7 @@ def test_voicemail_notifies_owner(monkeypatch):
                 session.add(row)
             row.owner_phone = "+15550101010"
             row.owner_email = "owner@example.com"
+            row.owner_email_alerts_enabled = True  # type: ignore[assignment]
             session.commit()
         finally:
             session.close()
@@ -554,6 +556,52 @@ def test_voicemail_notifies_owner(monkeypatch):
     assert sms_calls, "owner SMS alert should be sent for voicemail"
     assert email_calls, "owner email alert should be sent for voicemail"
 
+
+def test_missed_call_respects_email_toggle(monkeypatch):
+    metrics.callbacks_by_business.clear()
+    if SQLALCHEMY_AVAILABLE and SessionLocal is not None:
+        session = SessionLocal()
+        try:
+            row = session.get(BusinessDB, DEFAULT_BUSINESS_ID)
+            if row is None:
+                row = BusinessDB(  # type: ignore[call-arg]
+                    id=DEFAULT_BUSINESS_ID, name="Toggle Tenant", status="ACTIVE"
+                )
+                session.add(row)
+            row.owner_phone = "+15550101010"
+            row.owner_email = "owner@example.com"
+            row.owner_email_alerts_enabled = False  # type: ignore[assignment]
+            session.add(row)
+            session.commit()
+        finally:
+            session.close()
+
+    sms_calls = []
+    email_calls = []
+
+    async def _fake_sms(message: str, business_id: str):
+        sms_calls.append((message, business_id))
+
+    async def _fake_email(subject: str, body: str, business_id: str, owner_email: str):
+        email_calls.append((subject, body, business_id, owner_email))
+
+    monkeypatch.setattr("app.services.sms.sms_service.notify_owner", _fake_sms)
+    monkeypatch.setattr(
+        "app.services.email_service.email_service.notify_owner", _fake_email
+    )
+
+    resp = client.post(
+        "/twilio/voice",
+        data={
+            "CallSid": "CA_MISSED_TOGGLE",
+            "From": "+15557770000",
+            "CallStatus": "no-answer",
+        },
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
+    assert resp.status_code == 200
+    assert sms_calls, "owner SMS alert should be sent"
+    assert not email_calls, "owner email alert should be suppressed when disabled"
 
 def test_twilio_voice_session_persists_across_turns():
     metrics.callbacks_by_business.clear()

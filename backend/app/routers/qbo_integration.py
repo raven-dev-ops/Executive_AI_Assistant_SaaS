@@ -143,13 +143,20 @@ def _refresh_tokens(business_id: str) -> None:
                         "body": resp.text,
                     },
                 )
+                raise HTTPException(
+                    status_code=502, detail="QuickBooks refresh failed"
+                )
             except Exception as exc:  # pragma: no cover - defensive logging
                 logger.warning(
                     "qbo_refresh_exception",
                     exc_info=True,
                     extra={"business_id": business_id, "error": str(exc)},
                 )
-        # Fallback stub refresh path.
+                raise HTTPException(
+                    status_code=502, detail="QuickBooks refresh failed"
+                )
+
+        # Fallback stub refresh path only when not configured for live.
         new_access = f"access_{int(datetime.now(UTC).timestamp())}"
         row.qbo_access_token = new_access
         row.qbo_token_expires_at = datetime.now(UTC) + timedelta(hours=1)
@@ -312,14 +319,14 @@ def callback_qbo(
     business_id = state
     settings = get_settings().quickbooks
 
-    # When fully configured, use real token exchange; otherwise fall back to stub
-    # to keep dev/tests working without Intuit credentials.
-    if (
+    configured = (
         settings.client_id
         and settings.client_secret
         and getattr(settings, "token_base", None)
         and settings.redirect_uri
-    ):
+    )
+
+    if configured:
         token_url = settings.token_base
         data = {
             "grant_type": "authorization_code",
@@ -339,43 +346,28 @@ def callback_qbo(
                         "body": resp.text,
                     },
                 )
-                # In non-configured environments, fall back to stub tokens.
-                fake_access = f"access_{code}"
-                fake_refresh = f"refresh_{code}"
-                _mark_connected(business_id, realmId, fake_access, fake_refresh)
-                return QboCallbackResponse(
-                    connected=True, business_id=business_id, realm_id=realmId
+                raise HTTPException(
+                    status_code=502, detail="QuickBooks token exchange failed"
                 )
             payload = resp.json()
             access_token = payload.get("access_token")
             refresh_token = payload.get("refresh_token")
             expires_in = int(payload.get("expires_in") or 3600)
             if not access_token or not refresh_token:
-                fake_access = f"access_{code}"
-                fake_refresh = f"refresh_{code}"
-                _mark_connected(
-                    business_id, realmId, fake_access, fake_refresh, expires_in=None
-                )
-                return QboCallbackResponse(
-                    connected=True, business_id=business_id, realm_id=realmId
+                raise HTTPException(
+                    status_code=502, detail="QuickBooks token exchange missing tokens"
                 )
             _mark_connected(
                 business_id, realmId, access_token, refresh_token, expires_in=expires_in
             )
         except HTTPException:
             raise
-        except Exception:
+        except Exception as exc:
             logger.exception(
-                "qbo_callback_unexpected_error", extra={"business_id": business_id}
+                "qbo_callback_unexpected_error",
+                extra={"business_id": business_id, "error": str(exc)},
             )
-            fake_access = f"access_{code}"
-            fake_refresh = f"refresh_{code}"
-            _mark_connected(
-                business_id, realmId, fake_access, fake_refresh, expires_in=None
-            )
-            return QboCallbackResponse(
-                connected=True, business_id=business_id, realm_id=realmId
-            )
+            raise HTTPException(status_code=502, detail="QuickBooks callback failed")
     else:
         # Stub path when not configured.
         fake_access = f"access_{code}"

@@ -1,7 +1,11 @@
+from datetime import UTC, datetime, timedelta
+
 from fastapi.testclient import TestClient
 
 from app.main import app
 from app.repositories import customers_repo
+from app.db import SessionLocal
+from app.db_models import BusinessDB
 
 
 client = TestClient(app)
@@ -73,8 +77,6 @@ def test_qbo_sync_real_flow_with_mocks(monkeypatch):
         email="qbo@test.com",
         business_id="default_business",
     )
-    from datetime import UTC, datetime, timedelta
-
     start = datetime.now(UTC) + timedelta(days=1)
     end = start + timedelta(hours=1)
     appointments_repo.create(
@@ -88,19 +90,11 @@ def test_qbo_sync_real_flow_with_mocks(monkeypatch):
         calendar_event_id="evt_qbo",
     )
 
-    # Connect to seed tokens/realm.
-    cb_resp = client.get(
-        "/v1/integrations/qbo/callback",
-        params={"code": "abc123", "realmId": "realm-1", "state": "default_business"},
-    )
-    assert cb_resp.status_code == 200
-
-    # Mock httpx to simulate QBO API success.
     class DummyResp:
-        def __init__(self, status_code=200, body=None):
+        def __init__(self, status_code=200, body=None, text="{}"):
             self.status_code = status_code
             self._body = body or {}
-            self.text = "{}"
+            self.text = text
 
         def json(self):
             return self._body
@@ -123,9 +117,20 @@ def test_qbo_sync_real_flow_with_mocks(monkeypatch):
                 return DummyResp(body={"Customer": {"Id": "100"}})
             return DummyResp(body={"SalesReceipt": {"Id": "200"}})
 
+        def post(self, url, data=None, auth=None):
+            # Token exchange
+            return DummyResp(body={"access_token": "a", "refresh_token": "r", "expires_in": 3600})
+
     monkeypatch.setattr(
         qbo_integration, "httpx", type("X", (), {"Client": DummyClient})
     )
+
+    # Connect to seed tokens/realm.
+    cb_resp = client.get(
+        "/v1/integrations/qbo/callback",
+        params={"code": "abc123", "realmId": "realm-1", "state": "default_business"},
+    )
+    assert cb_resp.status_code == 200
 
     sync_resp = client.post("/v1/integrations/qbo/sync")
     assert sync_resp.status_code == 200
@@ -133,6 +138,83 @@ def test_qbo_sync_real_flow_with_mocks(monkeypatch):
     assert body["customers_pushed"] == 1
     assert body["receipts_pushed"] == 1
     assert calls and any("salesreceipt" in c["url"] for c in calls)
+
+
+def test_qbo_refresh_uses_live_tokens(monkeypatch):
+    from app.routers import qbo_integration
+
+    class DummyQB:
+        def __init__(self) -> None:
+            self.client_id = "id"
+            self.client_secret = "secret"
+            self.redirect_uri = "https://redirect"
+            self.scopes = "scope"
+            self.sandbox = True
+            self.authorize_base = "https://example.com/auth"
+            self.token_base = "https://example.com/token"
+
+    class Settings:
+        def __init__(self) -> None:
+            self.quickbooks = DummyQB()
+
+    class DummyResp:
+        def __init__(self, body=None, status_code=200):
+            self._body = body or {
+                "access_token": "new_access",
+                "refresh_token": "new_refresh",
+                "expires_in": 1200,
+            }
+            self.status_code = status_code
+            self.text = "ok"
+
+        def json(self):
+            return self._body
+
+    class DummyClient:
+        def __init__(self, timeout=None):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def post(self, url, data=None, auth=None):
+            assert "refresh_token" in data
+            return DummyResp()
+
+        def request(self, method, url, headers=None, json=None):
+            if "customer" in url:
+                return DummyResp(body={"Customer": {"Id": "1"}})
+            return DummyResp(body={"SalesReceipt": {"Id": "2"}})
+
+    monkeypatch.setattr(qbo_integration, "get_settings", lambda: Settings())
+    monkeypatch.setattr(qbo_integration, "httpx", type("X", (), {"Client": DummyClient}))
+
+    session = SessionLocal()
+    try:
+        row = session.get(BusinessDB, "default_business")
+        row.integration_qbo_status = "connected"  # type: ignore[assignment]
+        row.qbo_realm_id = "realm-123"  # type: ignore[assignment]
+        row.qbo_access_token = "old_access"  # type: ignore[assignment]
+        row.qbo_refresh_token = "old_refresh"  # type: ignore[assignment]
+        row.qbo_token_expires_at = datetime.now(UTC) - timedelta(minutes=1)  # type: ignore[assignment]
+        session.add(row)
+        session.commit()
+    finally:
+        session.close()
+
+    resp = client.post("/v1/integrations/qbo/sync")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["note"] == "QuickBooks sync completed."
+    session = SessionLocal()
+    try:
+        row = session.get(BusinessDB, "default_business")
+        assert row.qbo_access_token == "new_access"
+    finally:
+        session.close()
 
 
 def test_qbo_sync_stub_without_creds(monkeypatch):
@@ -157,3 +239,54 @@ def test_qbo_sync_stub_without_creds(monkeypatch):
     assert resp.status_code in {200, 400}
     if resp.status_code == 200:
         assert "Stubbed QuickBooks export" in resp.json().get("note", "")
+
+
+def test_qbo_callback_failure_when_configured(monkeypatch):
+    from app.routers import qbo_integration
+
+    class DummyQB:
+        def __init__(self) -> None:
+            self.client_id = "id"
+            self.client_secret = "secret"
+            self.redirect_uri = "https://redirect"
+            self.scopes = "scope"
+            self.sandbox = True
+            self.authorize_base = "https://example.com/auth"
+            self.token_base = "https://example.com/token"
+
+    class Settings:
+        def __init__(self) -> None:
+            self.quickbooks = DummyQB()
+
+    class DummyResp:
+        status_code = 500
+
+        def json(self):
+            return {}
+
+        @property
+        def text(self):
+            return "error"
+
+    class DummyClient:
+        def __init__(self, timeout=None):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def post(self, url, data=None, auth=None):
+            return DummyResp()
+
+    monkeypatch.setattr(qbo_integration, "get_settings", lambda: Settings())
+    monkeypatch.setattr(qbo_integration, "httpx", type("X", (), {"Client": DummyClient}))
+
+    resp = client.get(
+        "/v1/integrations/qbo/callback",
+        params={"code": "abc", "state": "default_business", "realmId": "1"},
+    )
+    assert resp.status_code == 502
+    assert "token exchange failed" in resp.json().get("detail", "")

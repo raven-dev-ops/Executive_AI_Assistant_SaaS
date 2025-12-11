@@ -42,7 +42,8 @@ def test_register_and_set_active_business():
         json={"business_id": "default_business"},
     )
     assert change.status_code == 200
-    assert change.json()["active_business_id"] == "default_business"
+    payload = change.json()
+    assert payload["user"]["active_business_id"] == "default_business"
 
 
 def test_login_refresh_and_me_with_bearer_token():

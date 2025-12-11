@@ -108,6 +108,7 @@ def test_owner_callbacks_queue_and_summary_reflect_metrics_state() -> None:
         status="PENDING",
         last_result=None,
         reason="MISSED_CALL",
+        voicemail_url=None,
     )
     queue["+15550000002"] = CallbackItem(
         phone="+15550000002",
@@ -119,6 +120,7 @@ def test_owner_callbacks_queue_and_summary_reflect_metrics_state() -> None:
         status="COMPLETED",
         last_result="completed",
         reason="PARTIAL_INTAKE",
+        voicemail_url="https://example.com/vm.wav",
     )
 
     # Queue endpoint should list only pending callbacks, ordered by last_seen.

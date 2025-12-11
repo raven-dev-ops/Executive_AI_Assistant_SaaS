@@ -462,6 +462,93 @@ def test_twilio_voicemail_records_callback(monkeypatch):
     assert item.status == "PENDING"
 
 
+def test_missed_call_notifies_owner(monkeypatch):
+    metrics.callbacks_by_business.clear()
+    # Ensure owner contact info exists.
+    if SQLALCHEMY_AVAILABLE and SessionLocal is not None:
+        session = SessionLocal()
+        try:
+            row = session.get(BusinessDB, DEFAULT_BUSINESS_ID)
+            if row is None:
+                row = BusinessDB(  # type: ignore[call-arg]
+                    id=DEFAULT_BUSINESS_ID, name="Notify Tenant", status="ACTIVE"
+                )
+                session.add(row)
+            row.owner_phone = "+15550101010"
+            row.owner_email = "owner@example.com"
+            session.commit()
+        finally:
+            session.close()
+
+    sms_calls = []
+    email_calls = []
+
+    async def _fake_sms(message: str, business_id: str):
+        sms_calls.append((message, business_id))
+
+    async def _fake_email(subject: str, body: str, business_id: str, owner_email: str):
+        email_calls.append((subject, body, business_id, owner_email))
+
+    monkeypatch.setattr("app.services.sms.sms_service.notify_owner", _fake_sms)
+    monkeypatch.setattr("app.services.email_service.email_service.notify_owner", _fake_email)
+
+    resp = client.post(
+        "/twilio/voice",
+        data={
+            "CallSid": "CA_MISSED_OWNER",
+            "From": "+15557779999",
+            "CallStatus": "no-answer",
+        },
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
+    assert resp.status_code == 200
+    assert sms_calls, "owner SMS alert should be sent"
+    assert email_calls, "owner email alert should be sent"
+
+
+def test_voicemail_notifies_owner(monkeypatch):
+    metrics.callbacks_by_business.clear()
+    if SQLALCHEMY_AVAILABLE and SessionLocal is not None:
+        session = SessionLocal()
+        try:
+            row = session.get(BusinessDB, DEFAULT_BUSINESS_ID)
+            if row is None:
+                row = BusinessDB(  # type: ignore[call-arg]
+                    id=DEFAULT_BUSINESS_ID, name="VM Tenant", status="ACTIVE"
+                )
+                session.add(row)
+            row.owner_phone = "+15550101010"
+            row.owner_email = "owner@example.com"
+            session.commit()
+        finally:
+            session.close()
+
+    sms_calls = []
+    email_calls = []
+
+    async def _fake_sms(message: str, business_id: str):
+        sms_calls.append((message, business_id))
+
+    async def _fake_email(subject: str, body: str, business_id: str, owner_email: str):
+        email_calls.append((subject, body, business_id, owner_email))
+
+    monkeypatch.setattr("app.services.sms.sms_service.notify_owner", _fake_sms)
+    monkeypatch.setattr("app.services.email_service.email_service.notify_owner", _fake_email)
+
+    resp = client.post(
+        "/twilio/voicemail",
+        data={
+            "CallSid": "CA_VM_NOTIFY",
+            "From": "+15558887777",
+            "RecordingUrl": "https://example.com/vm2.wav",
+        },
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
+    assert resp.status_code == 200
+    assert sms_calls, "owner SMS alert should be sent for voicemail"
+    assert email_calls, "owner email alert should be sent for voicemail"
+
+
 def _build_twilio_signature(path: str, params: dict[str, str], auth_token: str) -> str:
     # Mirror the signature algorithm in _maybe_verify_twilio_signature.
     url = f"http://testserver{path}"

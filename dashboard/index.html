@@ -2923,13 +2923,15 @@
 
             <h2>QuickBooks Link & Approvals</h2>
 
-          </div>
+        </div>
 
-          <div id="owner-qbo-content">
+        <div id="owner-qbo-mode" class="muted" style="margin: 0.25rem 0;"></div>
 
-            <div class="loading">Loading QuickBooks status...</div>
+        <div id="owner-qbo-content">
 
-          </div>
+          <div class="loading">Loading QuickBooks status...</div>
+
+        </div>
 
           <div class="button-row" style="margin-top: 1rem;">
 
@@ -5643,6 +5645,8 @@
 
         const content = document.getElementById("owner-qbo-content");
 
+        const modeEl = document.getElementById("owner-qbo-mode");
+
         const statusEl = document.getElementById("owner-qbo-status");
 
         if (!content) return;
@@ -5660,6 +5664,12 @@
             fetchJson("/v1/owner/qbo/pending"),
 
           ]);
+
+          if (modeEl) {
+            modeEl.textContent = summary.connected
+              ? `QuickBooks: live mode${summary.realm_id ? " (" + summary.realm_id + ")" : ""}`
+              : "QuickBooks: demo/stub mode until connected.";
+          }
 
           const badge = summary.connected
 
@@ -5796,8 +5806,10 @@
       async function connectOwnerQbo() {
 
         const statusEl = document.getElementById("owner-qbo-status");
+        const connectBtn = document.getElementById("owner-qbo-connect");
 
         if (statusEl) statusEl.textContent = "Opening QuickBooks authorization...";
+        if (connectBtn) connectBtn.disabled = true;
 
         try {
 
@@ -5817,8 +5829,17 @@
 
         } catch (err) {
 
-          if (statusEl) statusEl.textContent = "Unable to start QuickBooks OAuth.";
+          console.error(err);
+          if (statusEl) {
+            statusEl.textContent =
+              err?.detail ||
+              err?.message ||
+              "QuickBooks is not configured for this environment. Set QBO client id/secret/redirect to enable live mode.";
+          }
 
+        } finally {
+
+          if (connectBtn) connectBtn.disabled = false;
         }
 
       }

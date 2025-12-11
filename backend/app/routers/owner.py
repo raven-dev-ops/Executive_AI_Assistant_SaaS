@@ -2327,6 +2327,7 @@ class OwnerCallbackItem(BaseModel):
     status: str
     last_result: str | None = None
     reason: str | None = None
+    voicemail_url: str | None = None
 
 
 class OwnerCallbackQueueResponse(BaseModel):
@@ -3127,6 +3128,7 @@ def owner_callbacks(
                 status=status,
                 last_result=getattr(item, "last_result", None),
                 reason=getattr(item, "reason", None),
+                voicemail_url=getattr(item, "voicemail_url", None),
             )
         )
     items.sort(key=lambda i: i.last_seen, reverse=True)
@@ -3188,6 +3190,8 @@ def update_owner_callback(
         lead_source=item.lead_source,
         status=item.status,
         last_result=item.last_result,
+        reason=getattr(item, "reason", None),
+        voicemail_url=getattr(item, "voicemail_url", None),
     )
 
 

@@ -80,6 +80,7 @@ Working in This Repo
     bandit -q -r app -x tests
     pytest --cov=app
     ```
+  - CodeQL: the repo is private and CodeQL uploads require Advanced Security. The workflow is gated behind the repo variable `ENABLE_CODE_SCANNING=true`; set it in repo settings to turn CodeQL back on when the license is available.
 
 - **Pre-commit hooks**
   - This repo includes a `.pre-commit-config.yaml` wired for:

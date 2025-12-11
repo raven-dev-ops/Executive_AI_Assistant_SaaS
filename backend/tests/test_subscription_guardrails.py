@@ -191,5 +191,7 @@ async def test_subscription_blocks_when_plan_limits_exceeded(monkeypatch):
             DEFAULT_BUSINESS_ID, upcoming_calls=1, upcoming_appointments=0
         )
 
-    assert getattr(excinfo.value, "status_code", None) == status.HTTP_402_PAYMENT_REQUIRED
+    assert (
+        getattr(excinfo.value, "status_code", None) == status.HTTP_402_PAYMENT_REQUIRED
+    )
     config.get_settings.cache_clear()

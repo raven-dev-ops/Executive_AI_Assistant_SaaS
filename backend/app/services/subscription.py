@@ -237,7 +237,9 @@ async def check_access(
             state.message = state.message or (
                 f"Payment past due. Grace ends in {state.grace_remaining_days} day(s)."
             )
-            await _notify_owner_if_needed(business, state, message_override=state.message)
+            await _notify_owner_if_needed(
+                business, state, message_override=state.message
+            )
             return state
         state.blocked = True
         state.message = "Subscription inactive. Please upgrade or resume billing."

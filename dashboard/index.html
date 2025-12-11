@@ -2799,7 +2799,7 @@
         <div id="audit-log-content" class="muted">Loading activity...</div>
       </div>
 
-      <div class="card" id="callbacks-card">
+        <div class="card" id="callbacks-card">
 
         <div class="card-header">
 
@@ -2846,6 +2846,11 @@
           <button id="download-callbacks" type="button">Download CSV</button>
 
           <small class="muted">Missed/partial calls and voicemails appear here for follow-up. LLM assists intents but emergencies stay deterministic.</small>
+
+          <label style="display:flex; align-items:center; gap:0.35rem;">
+            <input type="checkbox" id="email-alerts-toggle" />
+            <span class="muted">Email owner alerts (Gmail connected)</span>
+          </label>
 
         </div>
 

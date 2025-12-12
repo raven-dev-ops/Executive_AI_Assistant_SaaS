@@ -1,0 +1,92 @@
+name: P0 Alert Checks
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "*/15 * * * *"  # every 15 minutes
+
+permissions:
+  contents: read
+
+jobs:
+  p0-alerts:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run P0 alert checks
+        env:
+          METRICS_URL: ${{ secrets.METRICS_URL }} # e.g., https://.../metrics/prometheus
+          METRICS_AUTH_HEADER: ${{ secrets.METRICS_AUTH_HEADER }} # e.g., Authorization: Bearer xxx
+          TWILIO_WEBHOOK_THRESHOLD: ${{ secrets.TWILIO_WEBHOOK_THRESHOLD }}
+          CALENDAR_FAILURE_THRESHOLD: ${{ secrets.CALENDAR_FAILURE_THRESHOLD }}
+          AUTH_FAILURE_THRESHOLD: ${{ secrets.AUTH_FAILURE_THRESHOLD }}
+          OWNER_ALERT_FAILURE_THRESHOLD: ${{ secrets.OWNER_ALERT_FAILURE_THRESHOLD }}
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }} # optional
+        run: |
+          python - <<'PY'
+          import os
+          import sys
+          import json
+          import requests
+
+          metrics_url = os.getenv("METRICS_URL")
+          hdr_raw = os.getenv("METRICS_AUTH_HEADER")
+          headers = {}
+          if hdr_raw and ":" in hdr_raw:
+              k, v = hdr_raw.split(":", 1)
+              headers[k.strip()] = v.strip()
+
+          thresholds = {
+              "ai_telephony_twilio_webhook_failures": float(os.getenv("TWILIO_WEBHOOK_THRESHOLD", "0") or 0),
+              "ai_telephony_calendar_webhook_failures": float(os.getenv("CALENDAR_FAILURE_THRESHOLD", "0") or 0),
+              "ai_telephony_alerts_open": float(os.getenv("OWNER_ALERT_FAILURE_THRESHOLD", "0") or 0),
+              "ai_telephony_total_errors": float(os.getenv("AUTH_FAILURE_THRESHOLD", "0") or 0),
+          }
+
+          def parse_metric(text: str, name: str) -> float | None:
+              for line in text.splitlines():
+                  line = line.strip()
+                  if not line or line.startswith("#"):
+                      continue
+                  if line.startswith(name + "{") or line.startswith(name + " "):
+                      try:
+                          value = float(line.split()[-1])
+                          return value
+                      except Exception:
+                          continue
+              return None
+
+          findings = []
+          if not metrics_url:
+              print("METRICS_URL not set; skipping.")
+          else:
+              try:
+                  resp = requests.get(metrics_url, headers=headers, timeout=10)
+                  resp.raise_for_status()
+                  text = resp.text
+                  for metric, threshold in thresholds.items():
+                      val = parse_metric(text, metric)
+                      if val is None:
+                          continue
+                      if val > threshold:
+                          findings.append(f"{metric}={val} > {threshold}")
+              except Exception as exc:
+                  findings.append(f"metrics_fetch_failed: {exc}")
+
+          if findings:
+              msg = "P0 alert conditions met: " + "; ".join(findings)
+              print(msg)
+              slack_webhook = os.getenv("SLACK_WEBHOOK")
+              if slack_webhook:
+                  try:
+                      requests.post(
+                          slack_webhook,
+                          headers={"Content-Type": "application/json"},
+                          data=json.dumps({"text": msg}),
+                          timeout=5,
+                      )
+                  except Exception as exc:
+                      print(f"Slack notify failed: {exc}", file=sys.stderr)
+              sys.exit(1)
+
+          print("P0 checks passed.")
+          PY

@@ -15,6 +15,15 @@ Alert rules (P0 focus)
 - **Owner notifications**: SMS delivery failure without retry success, or fallback email used > 3 times in 15 minutes → notify owner + IC.
 - **Stripe webhooks**: Signature verification failures or repeated 500s → alert and pause billing actions until resolved.
 
+Implementation (stack)
+----------------------
+- **Cloud Logging (Cloud Run default)**: Backend stdout/err flows into Cloud Logging. Set env `LOG_FORMAT=json` in prod for structured payloads. Create logs-based metrics and alerting policies (examples below) via `gcloud` or the console.
+  - Example logs-based metric filter (Twilio webhook failures):  
+    `resource.type=\"cloud_run_revision\" AND labels.\"service_name\"=\"ai-telephony-backend\" AND textPayload:\"twilio_webhook_failure\"`
+  - Alert policy CLI pattern (adjust metric and threshold):  
+    `gcloud alpha monitoring policies create --display-name=\"P0 Twilio webhook failures\" --condition-display-name=\"webhook failures\" --condition-filter=\"metric.type=\"logging.googleapis.com/user/twilio_webhook_failure\"\" --condition-compare=COMPARISON_GT --condition-threshold-value=5 --condition-duration=300s --notification-channels=<channel-ids>`
+- **Prometheus-style checks via GitHub Actions**: `.github/workflows/p0-alerts.yml` polls the `/metrics/prometheus` endpoint every 15 minutes. Configure repo secrets `METRICS_URL`, optional `METRICS_AUTH_HEADER`, thresholds (e.g., `TWILIO_WEBHOOK_THRESHOLD`, `CALENDAR_FAILURE_THRESHOLD`, `AUTH_FAILURE_THRESHOLD`, `OWNER_ALERT_FAILURE_THRESHOLD`), and optional `SLACK_WEBHOOK`. Workflow fails (and optionally posts to Slack) when thresholds are exceeded.
+
 Dashboards
 ----------
 - Create P0 dashboard panels for the above metrics; include red/amber/green thresholds and links to runbooks.

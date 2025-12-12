@@ -433,6 +433,7 @@ async def twilio_voice(
     if SpeechResult is not None:
         form_params["SpeechResult"] = SpeechResult
     await _maybe_verify_twilio_signature(request, form_params)
+    event_id = request.headers.get("X-Twilio-EventId") or request.headers.get("Twilio-Event-Id")
 
     try:
         # If the call has ended, we can clean up and optionally enqueue a callback
@@ -454,6 +455,13 @@ async def twilio_voice(
                 if parts:
                     ended_statuses.update(parts)
         if CallStatus and CallStatus.lower() in ended_statuses:
+            link = twilio_state_store.get_call_session(CallSid)
+            if link and event_id and getattr(link, "last_event_id", None) == event_id:
+                logger.info(
+                    "twilio_webhook_duplicate",
+                    extra={"call_sid": CallSid, "event_id": event_id, "status": CallStatus},
+                )
+                return Response(content="<Response/>", media_type="text/xml")
             link = twilio_state_store.clear_call_session(CallSid)
             session = None
             is_partial_lead = False
@@ -528,6 +536,10 @@ async def twilio_voice(
                         exc_info=True,
                         extra={"business_id": business_id, "reason": reason},
                     )
+            if link:
+                twilio_state_store.set_call_session(
+                    CallSid, link.session_id, state="ended", event_id=event_id
+                )
 
             # For partial leads where the assistant answered but the caller
             # dropped before intake completed, send a gentle SMS asking
@@ -563,6 +575,12 @@ async def twilio_voice(
         # Get or create an internal session for this Twilio call.
         link = twilio_state_store.get_call_session(CallSid)
         if link:
+            if event_id and getattr(link, "last_event_id", None) == event_id:
+                logger.info(
+                    "twilio_webhook_duplicate",
+                    extra={"call_sid": CallSid, "event_id": event_id, "status": CallStatus},
+                )
+                return Response(content="<Response/>", media_type="text/xml")
             session = sessions.session_store.get(link.session_id)
             session_id = link.session_id
         else:
@@ -572,7 +590,7 @@ async def twilio_voice(
                 lead_source=lead_source_param,
             )
             session_id = session.id
-            twilio_state_store.set_call_session(CallSid, session_id)
+            twilio_state_store.set_call_session(CallSid, session_id, state="active", event_id=event_id)
             # Create a conversation record for logging.
             customer = (
                 customers_repo.get_by_phone(From or "", business_id=business_id)
@@ -1638,11 +1656,19 @@ async def twilio_status_callback(request: Request) -> dict:
     """Capture Twilio delivery status callbacks for observability."""
     form_params = await request.form()
     await _maybe_verify_twilio_signature(request, form_params)
+    event_id = request.headers.get("X-Twilio-EventId") or request.headers.get("Twilio-Event-Id")
     message_sid = form_params.get("MessageSid")
     message_status = form_params.get("MessageStatus")
     to = form_params.get("To")
     from_ = form_params.get("From")
     error_code = form_params.get("ErrorCode")
+    # Deduplicate by EventId + MessageSid.
+    if event_id:
+        cache_key = f"status:{message_sid}"
+        if twilio_state_store.get_call_session(cache_key):
+            logger.info("twilio_status_duplicate", extra={"event_id": event_id, "sid": message_sid})
+            return {"received": True, "status": message_status, "sid": message_sid}
+        twilio_state_store.set_call_session(cache_key, cache_key, state=message_status, event_id=event_id)
     logger.info(
         "twilio_status_callback",
         extra={

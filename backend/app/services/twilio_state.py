@@ -22,6 +22,9 @@ logger = logging.getLogger(__name__)
 class CallSessionLink:
     session_id: str
     created_at: datetime
+    state: str | None = None  # e.g., initiated, active, ended
+    last_event_id: str | None = None
+    last_event_at: datetime | None = None
 
 
 @dataclass
@@ -38,7 +41,7 @@ class TwilioStateStore(Protocol):
 
     def get_call_session(self, call_sid: str) -> Optional[CallSessionLink]: ...
 
-    def set_call_session(self, call_sid: str, session_id: str) -> None: ...
+    def set_call_session(self, call_sid: str, session_id: str, state: str | None = None, event_id: str | None = None) -> None: ...
 
     def clear_call_session(self, call_sid: str) -> Optional[CallSessionLink]: ...
 
@@ -103,11 +106,16 @@ class InMemoryTwilioStateStore:
         self._prune_call_sessions()
         return self._call_map.get(call_sid)
 
-    def set_call_session(self, call_sid: str, session_id: str) -> None:
+    def set_call_session(
+        self, call_sid: str, session_id: str, state: str | None = None, event_id: str | None = None
+    ) -> None:
         self._prune_call_sessions()
         self._call_map[call_sid] = CallSessionLink(
             session_id=session_id,
             created_at=datetime.now(UTC),
+            state=state,
+            last_event_id=event_id,
+            last_event_at=datetime.now(UTC) if event_id else None,
         )
 
     def clear_call_session(self, call_sid: str) -> Optional[CallSessionLink]:
@@ -182,14 +190,26 @@ class RedisTwilioStateStore:
             return CallSessionLink(
                 session_id=data.get("session_id", ""),
                 created_at=created_at,
+                state=data.get("state"),
+                last_event_id=data.get("last_event_id"),
+                last_event_at=(
+                    datetime.fromisoformat(data.get("last_event_at"))
+                    if isinstance(data.get("last_event_at"), str)
+                    else None
+                ),
             )
         except Exception:
             return None
 
-    def set_call_session(self, call_sid: str, session_id: str) -> None:
+    def set_call_session(
+        self, call_sid: str, session_id: str, state: str | None = None, event_id: str | None = None
+    ) -> None:
         payload = {
             "session_id": session_id,
             "created_at": datetime.now(UTC).isoformat(),
+            "state": state,
+            "last_event_id": event_id,
+            "last_event_at": datetime.now(UTC).isoformat() if event_id else None,
         }
         try:
             self._client.setex(

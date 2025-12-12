@@ -24,6 +24,7 @@ from ..metrics import (
 )
 from ..repositories import conversations_repo, customers_repo, appointments_repo
 from ..services import conversation, sessions, subscription as subscription_service
+from ..services.stt_tts import speech_service
 from ..services.calendar import calendar_service
 from ..services.sms import sms_service
 from ..services.email_service import email_service
@@ -219,6 +220,55 @@ def _email_alerts_enabled(business_row: BusinessDB | None) -> bool:
         return True
     val = getattr(business_row, "owner_email_alerts_enabled", None)
     return True if val is None else bool(val)
+
+
+async def _maybe_alert_on_speech_circuit(
+    business_id: str,
+    owner_phone: str | None,
+    owner_email: str | None,
+    business_row: BusinessDB | None,
+    call_sid: str | None = None,
+) -> None:
+    """Notify owners when the speech circuit is open to prompt troubleshooting."""
+    diag = speech_service.diagnostics()
+    circuit_open = bool(diag.get("circuit_open"))
+    if not circuit_open:
+        metrics.speech_alerted_businesses.discard(business_id)
+        return
+    if business_id in metrics.speech_alerted_businesses:
+        return
+    last_error = diag.get("last_error")
+    base_message = "Speech provider is degraded; using fallback prompts."
+    if last_error:
+        base_message = f"Speech provider issue: {last_error}. Using fallback prompts."
+    alert_sent = False
+    if owner_phone:
+        try:
+            await sms_service.notify_owner(base_message, business_id=business_id)
+            alert_sent = True
+        except Exception:
+            logger.warning(
+                "speech_circuit_sms_alert_failed",
+                exc_info=True,
+                extra={"business_id": business_id, "call_sid": call_sid},
+            )
+    if owner_email and _email_alerts_enabled(business_row):
+        try:
+            await email_service.notify_owner(
+                subject="Speech provider degraded",
+                body=base_message,
+                business_id=business_id,
+                owner_email=owner_email,
+            )
+            alert_sent = True
+        except Exception:
+            logger.warning(
+                "speech_circuit_email_alert_failed",
+                exc_info=True,
+                extra={"business_id": business_id, "call_sid": call_sid},
+            )
+    if alert_sent:
+        metrics.speech_alerted_businesses.add(business_id)
 
 
 def _owner_emergency_counts_last_days(business_id: str, days: int) -> tuple[int, int]:
@@ -423,6 +473,10 @@ async def twilio_voice(
         if business_row is not None:
             owner_phone = getattr(business_row, "owner_phone", None)
             owner_email = getattr(business_row, "owner_email", None)
+
+    await _maybe_alert_on_speech_circuit(
+        business_id, owner_phone, owner_email, business_row, call_sid=CallSid
+    )
 
     # Optional signature verification.
     form_params: Dict[str, str] = {"CallSid": CallSid}
@@ -1076,6 +1130,23 @@ async def twilio_voice_assistant(
 
     await ensure_onboarding_ready(business_id)
 
+    business_row: BusinessDB | None = None
+    owner_phone = None
+    owner_email = None
+    if SQLALCHEMY_AVAILABLE and SessionLocal is not None:
+        session_db = SessionLocal()
+        try:
+            business_row = session_db.get(BusinessDB, business_id)
+        finally:
+            session_db.close()
+        if business_row is not None:
+            owner_phone = getattr(business_row, "owner_phone", None)
+            owner_email = getattr(business_row, "owner_email", None)
+
+    await _maybe_alert_on_speech_circuit(
+        business_id, owner_phone, owner_email, business_row, call_sid=CallSid
+    )
+
     # Optional signature verification.
     form_params: Dict[str, str] = {"CallSid": CallSid}
     if From is not None:
@@ -1317,6 +1388,12 @@ async def twilio_voice_stream(
             owner_phone = getattr(business_row, "owner_phone", None)
             owner_email = getattr(business_row, "owner_email", None)
 
+    language_code = get_language_for_business(business_id)
+
+    await _maybe_alert_on_speech_circuit(
+        business_id, owner_phone, owner_email, business_row, call_sid=payload.call_sid
+    )
+
     metrics.twilio_voice_requests += 1
     per_tenant = metrics.twilio_by_business.setdefault(
         business_id, BusinessTwilioMetrics()
@@ -1447,6 +1524,70 @@ async def twilio_voice_stream(
     conv = conversations_repo.get_by_session(session_obj.id)
     transcript = (payload.transcript or "").strip()
     reply_text: str | None = None
+    silent_turn = event == "media" and not transcript
+    if silent_turn:
+        session_obj.no_input_count = getattr(session_obj, "no_input_count", 0) + 1  # type: ignore[attr-defined]
+    else:
+        session_obj.no_input_count = 0  # type: ignore[attr-defined]
+    if silent_turn and getattr(session_obj, "no_input_count", 0) == 1:
+        if language_code == "es":
+            prompt = (
+                "No alcanzo a escucharte bien. Por favor di tu respuesta o marca 1 para sí o 2 para no."
+            )
+        else:
+            prompt = (
+                "I'm having trouble hearing you. Please say your answer or press 1 for yes or 2 for no."
+            )
+        if conv:
+            conversations_repo.append_message(conv.id, role="assistant", text=prompt)
+        return TwilioStreamResponse(
+            status="ok",
+            session_id=session_obj.id,
+            reply_text=prompt,
+            completed=False,
+        )
+    if silent_turn and getattr(session_obj, "no_input_count", 0) >= 2:
+        queue = metrics.callbacks_by_business.setdefault(business_id, {})
+        now = datetime.now(UTC)
+        phone = payload.from_number or payload.call_sid or ""
+        lead_source = getattr(session_obj, "lead_source", None) or payload.lead_source
+        existing = queue.get(phone)
+        if existing is None:
+            queue[phone] = CallbackItem(
+                phone=phone,
+                first_seen=now,
+                last_seen=now,
+                count=1,
+                channel="phone",
+                lead_source=lead_source,
+                reason="NO_INPUT",
+            )
+        else:
+            existing.last_seen = now
+            existing.count += 1
+            existing.reason = "NO_INPUT"
+            if lead_source:
+                existing.lead_source = lead_source
+            if getattr(existing, "status", "PENDING").upper() != "PENDING":
+                existing.status = "PENDING"
+                existing.last_result = None
+        session_obj.stage = "COMPLETED"
+        session_obj.status = "PENDING_FOLLOWUP"
+        fallback_reply = (
+            "Tengo problemas para escucharte. Te enviaremos un seguimiento para programar tu servicio."
+            if language_code == "es"
+            else "I'm having trouble hearing you. We'll follow up shortly to finish scheduling."
+        )
+        if conv:
+            conversations_repo.append_message(
+                conv.id, role="assistant", text=fallback_reply
+            )
+        return TwilioStreamResponse(
+            status="ok",
+            session_id=session_obj.id,
+            reply_text=fallback_reply,
+            completed=True,
+        )
     if event in {"start", "connected"} and not transcript:
         result = await conversation.conversation_manager.handle_input(session_obj, None)
         reply_text = result.reply_text

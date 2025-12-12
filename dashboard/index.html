@@ -2513,6 +2513,22 @@
 
         </div>
 
+        <div class="data-pill" id="data-pill-speech">
+
+          <div>
+
+            <strong>Speech services</strong>
+
+            <div class="pill-note">Monitor STT/TTS providers.</div>
+
+          </div>
+
+          <button class="pill-action" type="button" data-target="integration-card">Inspect</button>
+
+          <div class="muted" id="speech-health-note" style="font-size: 0.8rem; margin-top: 0.3rem;"></div>
+
+        </div>
+
         <div class="data-pill" id="data-pill-billing">
 
           <div>
@@ -4629,6 +4645,14 @@
 
         }
 
+        if (id === "data-pill-speech") {
+
+          const extra = document.getElementById("speech-health-note");
+
+          if (extra && note) extra.textContent = note;
+
+        }
+
       }
 
 
@@ -4712,6 +4736,8 @@
         setDataSourceStatus("data-pill-calendar", "warn", "Checking calendar sync...");
 
         setDataSourceStatus("data-pill-voice", "warn", "Awaiting webhook status...");
+
+        setDataSourceStatus("data-pill-speech", "warn", "Checking speech providers...");
 
         setDataSourceStatus("data-pill-billing", "warn", "Loading plan & payment...");
 
@@ -6783,9 +6809,75 @@
 
 
 
+      async function loadSpeechHealth() {
+
+        const detailEl = document.getElementById("speech-health-note");
+
+        if (detailEl) detailEl.textContent = "Checking speech providers...";
+
+        try {
+
+          const data = await fetchJson("/v1/admin/speech/health");
+
+          const provider = (data?.provider || "speech").toString();
+
+          const healthy = !!data?.healthy;
+
+          const circuitOpen = !!data?.circuit_open;
+
+          const usedFallback = !!data?.used_fallback;
+
+          const reason = (data?.reason || data?.detail || "").toString();
+
+          let summary = healthy ? `Healthy via ${provider}` : `Degraded via ${provider}`;
+
+          let state = healthy ? "ok" : "error";
+
+          if (circuitOpen) {
+
+            state = "warn";
+
+            summary = `Circuit open on ${provider}`;
+
+          } else if (usedFallback && healthy) {
+
+            summary = `Healthy (fallback active)`;
+
+          } else if (!healthy && reason) {
+
+            summary = `Degraded: ${reason}`;
+
+          }
+
+          setDataSourceStatus("data-pill-speech", state, summary);
+
+          if (detailEl) {
+
+            const detail = (data?.last_error || data?.detail || data?.reason || "").toString();
+
+            detailEl.textContent = detail || (usedFallback ? "Using fallback speech provider" : "");
+
+          }
+
+        } catch (err) {
+
+          console.error("speech health load failed", err);
+
+          setDataSourceStatus("data-pill-speech", "error", "Speech health unavailable");
+
+          if (detailEl) detailEl.textContent = "Unable to load speech health.";
+
+        }
+
+      }
+
+
+
       function refreshAllData() {
 
         loadOwnerKpis();
+
+        loadSpeechHealth();
 
         loadOwnerQbo();
 

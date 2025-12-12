@@ -16,6 +16,7 @@ from app.services import conversation
 from app.routers import twilio_integration
 from app.services import twilio_state, sessions
 from app.services.twilio_state import twilio_state_store
+from app.services.stt_tts import speech_service
 
 
 client = TestClient(app)
@@ -1048,6 +1049,75 @@ def test_twilio_voice_silence_fallbacks_to_voicemail():
     assert "<record" in body
     queue = metrics.callbacks_by_business.get(DEFAULT_BUSINESS_ID, {})
     assert phone in queue
+
+
+@pytest.mark.skipif(
+    not SQLALCHEMY_AVAILABLE or SessionLocal is None,
+    reason="Speech degradation alerts require database-backed owner contact",
+)
+def test_speech_circuit_alerts_owner_once(monkeypatch):
+    metrics.speech_alerted_businesses.clear()
+    original_until = getattr(speech_service, "_circuit_open_until", None)
+    try:
+        session = SessionLocal()
+        try:
+            row = session.get(BusinessDB, DEFAULT_BUSINESS_ID)
+            if row is None:
+                row = BusinessDB(  # type: ignore[call-arg]
+                    id=DEFAULT_BUSINESS_ID, name="Speech Alert Tenant", status="ACTIVE"
+                )
+                session.add(row)
+            row.owner_phone = "+15550101010"
+            row.owner_email = "owner@example.com"
+            row.owner_email_alerts_enabled = True  # type: ignore[assignment]
+            session.commit()
+        finally:
+            session.close()
+
+        sms_calls = []
+        email_calls = []
+
+        async def _fake_sms(message: str, business_id: str):
+            sms_calls.append((message, business_id))
+
+        async def _fake_email(
+            subject: str, body: str, business_id: str, owner_email: str
+        ):
+            email_calls.append((subject, body, business_id, owner_email))
+
+        monkeypatch.setattr("app.services.sms.sms_service.notify_owner", _fake_sms)
+        monkeypatch.setattr(
+            "app.services.email_service.email_service.notify_owner", _fake_email
+        )
+
+        speech_service._trip_circuit(cooldown_seconds=60)
+
+        resp1 = client.post(
+            "/twilio/voice",
+            data={
+                "CallSid": "CA_SPEECH_ALERT1",
+                "From": "+15550006666",
+            },
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        )
+        assert resp1.status_code == 200
+        assert sms_calls or email_calls
+
+        resp2 = client.post(
+            "/twilio/voice",
+            data={
+                "CallSid": "CA_SPEECH_ALERT2",
+                "From": "+15550007777",
+            },
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        )
+        assert resp2.status_code == 200
+        assert len(sms_calls) == 1
+        assert len(email_calls) == 1
+        assert DEFAULT_BUSINESS_ID in metrics.speech_alerted_businesses
+    finally:
+        speech_service._circuit_open_until = original_until
+        metrics.speech_alerted_businesses.clear()
 
 
 def test_twilio_voice_assistant_handles_partial_and_alerts_owner(monkeypatch):

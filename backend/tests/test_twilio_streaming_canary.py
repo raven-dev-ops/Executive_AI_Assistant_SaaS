@@ -87,3 +87,58 @@ def test_twilio_stream_stop_enqueues_partial_callback(monkeypatch):
     item = queue["+15550002222"]
     assert item.reason == "PARTIAL_INTAKE"
     assert item.status == "PENDING"
+
+
+def test_twilio_stream_silence_triggers_callback(monkeypatch):
+    metrics.callbacks_by_business.clear()
+    metrics.twilio_by_business.clear()
+    monkeypatch.setenv("TWILIO_STREAMING_ENABLED", "true")
+    config.get_settings.cache_clear()
+    deps.get_settings.cache_clear()
+
+    phone = "+15550003333"
+    start = client.post(
+        "/v1/twilio/voice-stream",
+        json={
+            "call_sid": "CS_SILENCE1",
+            "stream_sid": "SS_SILENCE1",
+            "event": "start",
+            "business_id": DEFAULT_BUSINESS_ID,
+            "from_number": phone,
+        },
+    )
+    assert start.status_code == 200
+
+    first = client.post(
+        "/v1/twilio/voice-stream",
+        json={
+            "call_sid": "CS_SILENCE1",
+            "stream_sid": "SS_SILENCE1",
+            "event": "media",
+            "business_id": DEFAULT_BUSINESS_ID,
+            "from_number": phone,
+            "transcript": "",
+        },
+    )
+    assert first.status_code == 200
+    first_body = first.json()
+    assert first_body["reply_text"]
+    assert "trouble hearing you" in first_body["reply_text"].lower()
+
+    second = client.post(
+        "/v1/twilio/voice-stream",
+        json={
+            "call_sid": "CS_SILENCE1",
+            "stream_sid": "SS_SILENCE1",
+            "event": "media",
+            "business_id": DEFAULT_BUSINESS_ID,
+            "from_number": phone,
+            "transcript": "",
+        },
+    )
+    assert second.status_code == 200
+    second_body = second.json()
+    assert second_body["completed"] is True
+    queue = metrics.callbacks_by_business.get(DEFAULT_BUSINESS_ID, {})
+    assert phone in queue
+    assert queue[phone].reason == "NO_INPUT"

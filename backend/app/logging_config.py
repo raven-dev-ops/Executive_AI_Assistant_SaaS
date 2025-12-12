@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import json
 import logging
+import os
 import sys
+from typing import Any, Dict
 
 from .context import request_id_ctx
 
@@ -26,6 +29,28 @@ def _ensure_request_id_filter(handler: logging.Handler) -> None:
     handler.addFilter(RequestIdFilter())
 
 
+class JsonFormatter(logging.Formatter):
+    """Lightweight JSON formatter for stdout logs."""
+
+    def format(self, record: logging.LogRecord) -> str:  # type: ignore[override]
+        payload: Dict[str, Any] = {
+            "timestamp": self.formatTime(record, "%Y-%m-%dT%H:%M:%S"),
+            "level": record.levelname,
+            "logger": record.name,
+            "message": record.getMessage(),
+        }
+        # Include request id if present (added by RequestIdFilter).
+        if hasattr(record, "request_id"):
+            payload["request_id"] = getattr(record, "request_id")
+        # Include extra simple fields (ints/str/bool) if provided in log records.
+        for key, value in record.__dict__.items():
+            if key in payload or key.startswith("_"):
+                continue
+            if isinstance(value, (str, int, float, bool)):
+                payload[key] = value
+        return json.dumps(payload, ensure_ascii=False)
+
+
 def configure_logging() -> None:
     """Configure basic structured logging for the backend.
 
@@ -40,10 +65,14 @@ def configure_logging() -> None:
         return
 
     handler = logging.StreamHandler(sys.stdout)
-    formatter = logging.Formatter(
-        fmt="%(asctime)s %(levelname)s %(name)s [request_id=%(request_id)s] %(message)s",
-        datefmt="%Y-%m-%dT%H:%M:%S",
-    )
+    log_format = os.getenv("LOG_FORMAT", "plain").lower()
+    if log_format == "json":
+        formatter = JsonFormatter()
+    else:
+        formatter = logging.Formatter(
+            fmt="%(asctime)s %(levelname)s %(name)s [request_id=%(request_id)s] %(message)s",
+            datefmt="%Y-%m-%dT%H:%M:%S",
+        )
     handler.setFormatter(formatter)
     _ensure_request_id_filter(handler)
     root.addHandler(handler)

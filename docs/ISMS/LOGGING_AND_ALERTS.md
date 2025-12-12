@@ -3,7 +3,7 @@ Logging, Monitoring, and Alert Rules
 
 Central log pipeline
 --------------------
-- Emit structured key/value logs from backend (`backend/app/logging_config.py`) with request IDs and correlation IDs; ship stdout to the log sink (e.g., Cloud Logging or Datadog). JSON formatting can be added at the collector if needed.
+- Emit structured key/value logs from backend (`backend/app/logging_config.py`) with request IDs; ship stdout to the log sink (e.g., Cloud Logging or Datadog). Set `LOG_FORMAT=json` for JSON output from the app if the collector does not normalize plain text.
 - Normalize fields: `severity`, `tenant`, `request_id`, `call_sid`, `webhook_event`, `auth_principal`, `customer_phone`, `status`.
 - Retention: 30 days for standard logs; 90 days for security/audit logs (webhooks/auth/access).
 

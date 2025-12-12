@@ -5,6 +5,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import List, Optional
 import httpx
+import json
 
 try:  # Optional Google Calendar dependencies.
     from google.auth.transport.requests import Request
@@ -119,23 +120,36 @@ def _get_business_hours(business_id: str | None) -> tuple[int, int, set[int]]:
 
 def _get_business_capacity(
     business_id: str | None,
-) -> tuple[Optional[int], bool, int]:
-    """Return (max_jobs_per_day, reserve_mornings_for_emergencies, travel_buffer_minutes).
+) -> tuple[Optional[int], bool, int, dict[str, int]]:
+    """Return (max_jobs_per_day, reserve_mornings_for_emergencies, travel_buffer_minutes, service_durations).
 
     Values are pulled from the Business row when database support is available.
     Missing values fall back to sensible defaults:
     - max_jobs_per_day: None (no explicit per-day cap)
     - reserve_mornings_for_emergencies: False
     - travel_buffer_minutes: 0
+    - service_durations: {} (no per-service overrides)
     """
     max_jobs_per_day: Optional[int] = None
     reserve_mornings_for_emergencies = False
     travel_buffer_minutes = 0
+    service_durations: dict[str, int] = {}
 
     if business_id and SQLALCHEMY_AVAILABLE and SessionLocal is not None:
         session_db = SessionLocal()
         try:
             row = session_db.get(BusinessDB, business_id)
+            raw_duration_config = getattr(row, "service_duration_config", None) or ""
+            try:
+                parsed = json.loads(raw_duration_config) if raw_duration_config else {}
+                if isinstance(parsed, dict):
+                    service_durations = {
+                        str(k): int(v)
+                        for k, v in parsed.items()
+                        if isinstance(v, (int, float))
+                    }
+            except Exception:
+                service_durations = {}
         finally:
             session_db.close()
         if row is not None:
@@ -156,7 +170,12 @@ def _get_business_capacity(
                 except (TypeError, ValueError):
                     travel_buffer_minutes = 0
 
-    return max_jobs_per_day, reserve_mornings_for_emergencies, travel_buffer_minutes
+    return (
+        max_jobs_per_day,
+        reserve_mornings_for_emergencies,
+        travel_buffer_minutes,
+        service_durations,
+    )
 
 
 def _load_gcal_tokens(business_id: str) -> OAuthToken | None:
@@ -293,6 +312,40 @@ def _align_to_business_hours(
     return start
 
 
+def _build_busy_ranges(
+    appointments: List,
+    travel_buffer_minutes: int,
+    target_address: str | None = None,
+) -> List[tuple[datetime, datetime]]:
+    """Return busy ranges for appointments with optional travel buffers."""
+
+    ranges: List[tuple[datetime, datetime]] = []
+    for appt in appointments:
+        appt_start = getattr(appt, "start_time", None)
+        appt_end = getattr(appt, "end_time", None)
+        if not appt_start or not appt_end:
+            continue
+        buffer_minutes = travel_buffer_minutes
+        if target_address and getattr(appt, "address", None):
+            try:
+                from ..services.geo_utils import geocode_address, haversine_km
+
+                prev_coords = geocode_address(getattr(appt, "address"))
+                next_coords = geocode_address(target_address)
+                if prev_coords and next_coords:
+                    km = haversine_km(prev_coords, next_coords)
+                    buffer_minutes = max(buffer_minutes, int((km / 40) * 60) + 10)
+            except Exception:
+                buffer_minutes = travel_buffer_minutes
+
+        if buffer_minutes > 0:
+            appt_start = appt_start - timedelta(minutes=buffer_minutes)
+            appt_end = appt_end + timedelta(minutes=buffer_minutes)
+        ranges.append((appt_start, appt_end))
+    ranges.sort(key=lambda r: r[0])
+    return ranges
+
+
 class CalendarService:
     """Encapsulates calendar operations.
 
@@ -300,6 +353,19 @@ class CalendarService:
     the environment is configured with a service account credentials file and
     `CALENDAR_USE_STUB=false`, it will attempt to use Google Calendar.
     """
+
+    def resolve_duration_minutes(
+        self,
+        business_id: str | None,
+        service_type: str | None,
+        default_minutes: int,
+    ) -> int:
+        """Resolve duration using per-service overrides when configured."""
+
+        _, _, _, service_durations = _get_business_capacity(business_id)
+        if service_type and service_type in service_durations:
+            return int(service_durations[service_type])
+        return default_minutes
 
     def __init__(self) -> None:
         self._settings = get_settings().calendar
@@ -395,7 +461,11 @@ class CalendarService:
         is_emergency: bool | None = None,
         technician_id: str | None = None,
         address: str | None = None,
+        service_type: str | None = None,
     ) -> List[TimeSlot]:
+        duration_minutes = self.resolve_duration_minutes(
+            business_id, service_type, duration_minutes
+        )
         # Choose client: tenant OAuth > service account > stub.
         client = (
             None
@@ -428,6 +498,7 @@ class CalendarService:
                 max_jobs_per_day,
                 reserve_mornings_for_emergencies,
                 travel_buffer_minutes,
+                _service_durations,
             ) = _get_business_capacity(business_id)
 
             # Search starting roughly an hour from now, up to two weeks out.
@@ -513,35 +584,9 @@ class CalendarService:
                     continue
 
                 # Build busy ranges including travel buffers.
-                busy_ranges: List[tuple[datetime, datetime]] = []
-                for appt in day_appts:
-                    appt_start = getattr(appt, "start_time")
-                    appt_end = getattr(appt, "end_time")
-                    buffer_minutes = travel_buffer_minutes
-                    if address and getattr(appt, "address", None):
-                        try:
-                            from ..services.geo_utils import (
-                                geocode_address,
-                                haversine_km,
-                            )
-
-                            prev_coords = geocode_address(getattr(appt, "address"))
-                            next_coords = geocode_address(address)
-                            if prev_coords and next_coords:
-                                km = haversine_km(prev_coords, next_coords)
-                                # Assume average travel speed 40 km/h, add a 10-minute pad.
-                                buffer_minutes = max(
-                                    buffer_minutes, int((km / 40) * 60) + 10
-                                )
-                        except Exception:
-                            buffer_minutes = travel_buffer_minutes
-
-                    if buffer_minutes > 0:
-                        appt_start = appt_start - timedelta(minutes=buffer_minutes)
-                        appt_end = appt_end + timedelta(minutes=buffer_minutes)
-                    busy_ranges.append((appt_start, appt_end))
-
-                busy_ranges.sort(key=lambda r: r[0])
+                busy_ranges = _build_busy_ranges(
+                    day_appts, travel_buffer_minutes, address
+                )
 
                 # Scan for the first free gap that can hold the duration.
                 candidate = candidate_start
@@ -578,10 +623,15 @@ class CalendarService:
         # after "now" of the requested duration, using the primary calendar.
         now = datetime.now(UTC)
         open_hour, close_hour, closed_days = _get_business_hours(business_id)
-        max_jobs_per_day, reserve_mornings_for_emergencies, travel_buffer_minutes = (
-            _get_business_capacity(business_id)
+        (
+            max_jobs_per_day,
+            reserve_mornings_for_emergencies,
+            travel_buffer_minutes,
+            service_durations,
+        ) = _get_business_capacity(business_id)
+        duration = timedelta(
+            minutes=service_durations.get(service_type or "", duration_minutes)
         )
-        duration = timedelta(minutes=duration_minutes)
         candidate_start = _align_to_business_hours(
             now + timedelta(hours=1),
             duration,
@@ -610,7 +660,6 @@ class CalendarService:
             # On API failure, fall back to stub behaviour.
             now = datetime.now(UTC)
             open_hour, close_hour, closed_days = _get_business_hours(business_id)
-            duration = timedelta(minutes=duration_minutes)
             candidate = _align_to_business_hours(
                 now + timedelta(hours=1),
                 duration,
@@ -788,6 +837,81 @@ class CalendarService:
         if updates:
             appointments_repo.update(appt.id, **updates)
         return True
+
+    def has_conflict(
+        self,
+        *,
+        business_id: str,
+        start: datetime,
+        end: datetime,
+        technician_id: str | None = None,
+        address: str | None = None,
+        is_emergency: bool = False,
+    ) -> bool:
+        """Return True when the proposed slot conflicts with business rules."""
+
+        if start.tzinfo is None:
+            start = start.replace(tzinfo=UTC)
+        if end.tzinfo is None:
+            end = end.replace(tzinfo=UTC)
+
+        if start >= end:
+            return True
+
+        open_hour, close_hour, closed_days = _get_business_hours(business_id)
+        if start.weekday() in closed_days:
+            return True
+
+        day_open = start.replace(hour=open_hour, minute=0, second=0, microsecond=0)
+        day_close = start.replace(hour=close_hour, minute=0, second=0, microsecond=0)
+        if start < day_open or end > day_close:
+            return True
+
+        (
+            max_jobs_per_day,
+            reserve_mornings_for_emergencies,
+            travel_buffer_minutes,
+            _,
+        ) = _get_business_capacity(business_id)
+
+        if reserve_mornings_for_emergencies and not is_emergency:
+            morning_end = start.replace(
+                hour=max(open_hour, 12), minute=0, second=0, microsecond=0
+            )
+            if start < morning_end:
+                return True
+
+        from ..repositories import appointments_repo  # local import to avoid cycles
+
+        appointments = appointments_repo.list_for_business(business_id)
+        if technician_id is not None:
+            appointments = [
+                a
+                for a in appointments
+                if getattr(a, "technician_id", None) == technician_id
+            ]
+        day_appts = []
+        for appt in appointments:
+            appt_start = getattr(appt, "start_time", None)
+            appt_end = getattr(appt, "end_time", None)
+            if not appt_start or not appt_end:
+                continue
+            if appt_start.date() != start.date():
+                continue
+            status = getattr(appt, "status", "SCHEDULED").upper()
+            if status not in {"SCHEDULED", "CONFIRMED"}:
+                continue
+            day_appts.append(appt)
+
+        if max_jobs_per_day is not None and len(day_appts) >= max_jobs_per_day:
+            return True
+
+        busy_ranges = _build_busy_ranges(day_appts, travel_buffer_minutes, address)
+        for busy_start, busy_end in busy_ranges:
+            if start < busy_end and end > busy_start:
+                return True
+
+        return False
 
     async def delete_event(
         self,

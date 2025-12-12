@@ -30,7 +30,9 @@ def test_crm_customer_and_appointment_flow():
     assert any(c["id"] == customer_id for c in customers)
 
     # Create appointment
-    start = datetime.now(UTC) + timedelta(days=1)
+    start = (datetime.now(UTC) + timedelta(days=7)).replace(
+        hour=10, minute=0, second=0, microsecond=0
+    )
     end = start + timedelta(hours=1)
     appt_resp = client.post(
         "/v1/crm/appointments",
@@ -96,7 +98,9 @@ def test_crm_list_customers_and_appointments_support_pagination():
     customer_id = created_ids[0]
     now = datetime.now(UTC)
     for i in range(3):
-        start = now + timedelta(days=i + 1)
+        start = (now + timedelta(days=i + 10)).replace(
+            hour=10, minute=0, second=0, microsecond=0
+        )
         end = start + timedelta(hours=1)
         resp = client.post(
             "/v1/crm/appointments",
@@ -154,9 +158,13 @@ def test_crm_appointments_support_basic_filters():
     customer_id = resp.json()["id"]
 
     now = datetime.now(UTC)
-    start1 = now + timedelta(days=1)
+    start1 = (now + timedelta(days=20)).replace(
+        hour=10, minute=0, second=0, microsecond=0
+    )
     end1 = start1 + timedelta(hours=1)
-    start2 = now + timedelta(days=2)
+    start2 = (now + timedelta(days=21)).replace(
+        hour=10, minute=0, second=0, microsecond=0
+    )
     end2 = start2 + timedelta(hours=1)
 
     resp1 = client.post(

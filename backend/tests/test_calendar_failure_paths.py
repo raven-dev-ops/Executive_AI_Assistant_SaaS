@@ -29,12 +29,13 @@ def test_parse_closed_days_and_invalid_hours(monkeypatch):
     assert open_hour == 18 and close_hour == 8
     assert closed_days == set()
 
-    max_jobs, reserve_mornings, buffer_minutes = calendar_mod._get_business_capacity(
+    max_jobs, reserve_mornings, buffer_minutes, service_durations = calendar_mod._get_business_capacity(
         business_id=None
     )
     assert max_jobs is None
     assert reserve_mornings is False
     assert buffer_minutes == 0
+    assert service_durations == {}
 
 
 def test_get_business_capacity_handles_invalid_values(monkeypatch):
@@ -53,12 +54,13 @@ def test_get_business_capacity_handles_invalid_values(monkeypatch):
     monkeypatch.setattr(calendar_mod, "SQLALCHEMY_AVAILABLE", True)
     monkeypatch.setattr(calendar_mod, "SessionLocal", lambda: DummySession())
 
-    max_jobs, reserve_mornings, buffer_minutes = calendar_mod._get_business_capacity(
+    max_jobs, reserve_mornings, buffer_minutes, service_durations = calendar_mod._get_business_capacity(
         "biz-capacity"
     )
     assert max_jobs is None
     assert reserve_mornings is True  # truthy string coerces to bool
     assert buffer_minutes == 0
+    assert service_durations == {}
 
 
 @pytest.mark.anyio
@@ -232,7 +234,7 @@ async def test_calendar_find_slots_respects_busy_ranges_and_travel_buffer(
 
     # Monkeypatch business capacity to enable travel buffer and reserve mornings.
     def fake_get_business_capacity(business_id: str | None):
-        return 10, True, 30
+        return 10, True, 30, {}
 
     monkeypatch.setattr(
         "app.services.calendar._get_business_capacity", fake_get_business_capacity

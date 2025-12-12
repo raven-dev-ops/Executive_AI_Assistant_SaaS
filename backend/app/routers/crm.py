@@ -436,6 +436,26 @@ async def create_appointment(
     customer = customers_repo.get(payload.customer_id)
     if not customer:
         raise HTTPException(status_code=404, detail="Customer not found")
+    actual_minutes = int(
+        (payload.end_time - payload.start_time).total_seconds() // 60
+    )
+    expected_minutes = calendar_service.resolve_duration_minutes(
+        business_id, payload.service_type, actual_minutes
+    )
+    if payload.service_type and expected_minutes != actual_minutes:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Service type {payload.service_type} requires duration {expected_minutes} minutes.",
+        )
+    if calendar_service.has_conflict(
+        business_id=business_id,
+        start=payload.start_time,
+        end=payload.end_time,
+        technician_id=payload.technician_id,
+        is_emergency=payload.is_emergency,
+        address=getattr(customer, "address", None),
+    ):
+        raise HTTPException(status_code=409, detail="Requested time slot is unavailable")
     appt = appointments_repo.create(
         customer_id=payload.customer_id,
         start_time=payload.start_time,

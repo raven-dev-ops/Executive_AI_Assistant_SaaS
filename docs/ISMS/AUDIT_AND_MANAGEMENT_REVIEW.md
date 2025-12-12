@@ -12,6 +12,13 @@ Plan (upcoming)
 - Select external certification partner: shortlist and engage by February 2026; target ISO 27001 audit readiness by end of Q1 2026.
 - Evidence pack: collect logs (access reviews, DR drills, CI runs, vulnerability scans) per quarter and store in secure share.
 
+Action items
+------------
+- Create calendar invites for the January 2026 internal audit and quarterly management reviews (attach agenda and evidence links).
+- Build an evidence index in the secure share (access logs, DR drill results, CI scan exports, incident log) and link from GitHub issues.
+- Track audit findings/nonconformities as GitHub issues labeled `audit` with owners and due dates.
+- Finalize shortlist of ISO partners and select target external audit window (Q1 2026).
+
 Outputs
 -------
 - Internal audit report with findings, severities, and due dates; track as GitHub issues labeled `audit`.

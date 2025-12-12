@@ -473,7 +473,7 @@ async def twilio_voice(
                     if status_val not in conversation.ALLOWED_TERMINAL_STATUSES:
                         is_partial_lead = True
                 sessions.session_store.end(link.session_id)
-            from ..metrics import CallbackItem, metrics as _metrics  # local import
+            from ..metrics import metrics as _metrics  # local import
             from ..services.sms import sms_service  # local import to avoid cycles
             from ..business_config import (  # local import
                 get_language_for_business as _get_language_for_business,
@@ -486,7 +486,7 @@ async def twilio_voice(
             lead_source = getattr(session, "lead_source", None)
             reason_code = "PARTIAL_INTAKE" if is_partial_lead else "MISSED_CALL"
             if existing is None:
-                queue[phone] = CallbackItem(
+                queue[phone] = _metrics.CallbackItem(
                     phone=phone,
                     first_seen=now,
                     last_seen=now,
@@ -606,10 +606,67 @@ async def twilio_voice(
 
         # Bridge Twilio's speech result into the conversation manager.
         text = SpeechResult or ""
+        silent_turn = not (text and text.strip())
+        if silent_turn:
+            session.no_input_count = getattr(session, "no_input_count", 0) + 1  # type: ignore[attr-defined]
+        else:
+            session.no_input_count = 0  # type: ignore[attr-defined]
         if text:
             conv = conversations_repo.get_by_session(session_id)
             if conv:
                 conversations_repo.append_message(conv.id, role="user", text=text)
+
+        if silent_turn and getattr(session, "no_input_count", 0) >= 2:
+            queue = metrics.callbacks_by_business.setdefault(business_id, {})
+            now = datetime.now(UTC)
+            phone = From or CallSid or ""
+            existing = queue.get(phone)
+            lead_source = getattr(session, "lead_source", None)
+            if existing is None:
+                queue[phone] = CallbackItem(
+                    phone=phone,
+                    first_seen=now,
+                    last_seen=now,
+                    count=1,
+                    channel="phone",
+                    lead_source=lead_source,
+                    reason="NO_INPUT",
+                )
+            else:
+                existing.last_seen = now
+                existing.count += 1
+                existing.reason = "NO_INPUT"
+                if lead_source:
+                    existing.lead_source = lead_source
+                if getattr(existing, "status", "PENDING").upper() != "PENDING":
+                    existing.status = "PENDING"
+                    existing.last_result = None
+            session.stage = "COMPLETED"
+            session.status = "PENDING_FOLLOWUP"
+            if language_code == "es":
+                reply_text = (
+                    "Tengo problemas para escucharte. Te enviarAc al buzA3n de voz para que dejes tu nombre y direcciA3n."
+                )
+            else:
+                reply_text = (
+                    "I'm having trouble hearing you. I'm sending you to voicemail so you can leave your name and address."
+                )
+            safe_reply = escape(reply_text)
+            allow_voicemail = getattr(get_settings().sms, "enable_voicemail", True)
+            record_block = ""
+            if allow_voicemail:
+                action = "/twilio/voicemail"
+                if business_id_param:
+                    action = f"{action}?business_id={business_id}"
+                record_block = f'<Record action="{action}" method="POST" playBeep="true" timeout="5" />'
+            twiml = f"""
+  <Response>
+    <Say voice="alice"{say_language_attr}>{safe_reply}</Say>
+    {record_block}
+    <Hangup/>
+  </Response>
+  """.strip()
+            return Response(content=twiml, media_type="text/xml")
 
         result = await conversation.conversation_manager.handle_input(
             session, text or None
@@ -1070,9 +1127,64 @@ async def twilio_voice_assistant(
 
     # Route speech input into the assistant.
     text = SpeechResult.strip() if SpeechResult else None
+    silent_turn = not (text and text.strip())
+    if silent_turn:
+        count = getattr(session, "no_input_count", 0) + 1
+        session.no_input_count = count  # type: ignore[attr-defined]
+    else:
+        session.no_input_count = 0  # type: ignore[attr-defined]
     conv = conversations_repo.get_by_session(session.id)
     if conv and text:
         conversations_repo.append_message(conv.id, role="user", text=text)
+
+    if silent_turn and getattr(session, "no_input_count", 0) >= 2:
+        queue = metrics.callbacks_by_business.setdefault(business_id, {})
+        now = datetime.now(UTC)
+        phone = From or CallSid or ""
+        existing = queue.get(phone)
+        if existing is None:
+            queue[phone] = CallbackItem(
+                phone=phone,
+                first_seen=now,
+                last_seen=now,
+                count=1,
+                channel="phone",
+                reason="NO_INPUT",
+            )
+        else:
+            existing.last_seen = now
+            existing.count += 1
+            existing.reason = "NO_INPUT"
+            if getattr(existing, "status", "PENDING").upper() != "PENDING":
+                existing.status = "PENDING"
+                existing.last_result = None
+
+        session.stage = "COMPLETED"
+        session.status = "PENDING_FOLLOWUP"
+        if language_code == "es":
+            reply_text = (
+                "Tengo problemas para escucharte. Te transferirAc para que dejes un breve buzA3n de voz con tu nombre y direcciA3n."
+            )
+        else:
+            reply_text = (
+                "I'm having trouble hearing you. I'm sending you to voicemail so you can leave your name and address."
+            )
+        safe_reply = escape(reply_text)
+        allow_voicemail = getattr(get_settings().sms, "enable_voicemail", True)
+        record_block = ""
+        if allow_voicemail:
+            action = "/twilio/voicemail"
+            if business_id_param:
+                action = f"{action}?business_id={business_id}"
+            record_block = f'<Record action="{action}" method="POST" playBeep="true" timeout="5" />'
+        twiml = f"""
+<Response>
+  <Say voice="alice"{say_language_attr}>{safe_reply}</Say>
+  {record_block}
+  <Hangup/>
+</Response>
+""".strip()
+        return Response(content=twiml, media_type="text/xml")
 
     try:
         result = await conversation.conversation_manager.handle_input(session, text)

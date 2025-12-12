@@ -17,6 +17,7 @@ from ..deps import require_admin_auth
 from ..metrics import metrics
 from ..repositories import appointments_repo, conversations_repo, customers_repo
 from ..services.gcp_storage import get_gcs_health
+from ..services.stt_tts import speech_service
 from ..services.retention_purge import PurgeResult, run_retention_purge
 
 
@@ -178,6 +179,16 @@ class GcpStorageHealthResponse(BaseModel):
     library_available: bool
     can_connect: bool
     error: str | None = None
+
+
+class SpeechHealthResponse(BaseModel):
+    provider: str
+    healthy: bool
+    reason: str | None = None
+    detail: str | None = None
+    last_error: str | None = None
+    used_fallback: bool | None = None
+    circuit_open: bool | None = None
 
 
 class AdminEnvironmentResponse(BaseModel):
@@ -985,6 +996,22 @@ def gcp_storage_health() -> GcpStorageHealthResponse:
         library_available=health.library_available,
         can_connect=health.can_connect,
         error=health.error,
+    )
+
+
+@router.get("/speech/health", response_model=SpeechHealthResponse)
+async def speech_health() -> SpeechHealthResponse:
+    """Return a lightweight health snapshot for STT/TTS providers."""
+    base = await speech_service.health()
+    diag = speech_service.diagnostics()
+    return SpeechHealthResponse(
+        provider=base.get("provider", "unknown"),
+        healthy=bool(base.get("healthy", False)),
+        reason=base.get("reason"),
+        detail=base.get("detail"),
+        last_error=diag.get("last_error"),
+        used_fallback=diag.get("used_fallback"),
+        circuit_open=diag.get("circuit_open"),
     )
 
 

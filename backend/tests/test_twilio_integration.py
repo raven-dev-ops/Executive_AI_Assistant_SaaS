@@ -1027,6 +1027,29 @@ def test_twilio_voice_persists_session_and_conversation_messages():
     assert any(m.text == "I need help with a leak" for m in conv_after.messages)
 
 
+def test_twilio_voice_silence_fallbacks_to_voicemail():
+    metrics.callbacks_by_business.clear()
+    call_sid = "silent-call"
+    phone = "+15551230000"
+    resp1 = client.post(
+        "/twilio/voice",
+        data={"CallSid": call_sid, "From": phone, "SpeechResult": ""},
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
+    assert resp1.status_code == 200
+    resp2 = client.post(
+        "/twilio/voice",
+        data={"CallSid": call_sid, "From": phone, "SpeechResult": ""},
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
+    assert resp2.status_code == 200
+    body = resp2.text.lower()
+    assert "trouble hearing you" in body or "problemas para escucharte" in body
+    assert "<record" in body
+    queue = metrics.callbacks_by_business.get(DEFAULT_BUSINESS_ID, {})
+    assert phone in queue
+
+
 def test_twilio_voice_assistant_handles_partial_and_alerts_owner(monkeypatch):
     metrics.callbacks_by_business.clear()
     call_sid = "CA_BRIDGE1"

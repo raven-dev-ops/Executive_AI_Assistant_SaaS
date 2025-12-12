@@ -397,3 +397,14 @@ def test_admin_retention_prune_deletes_old_data() -> None:
     assert body["appointments_deleted"] >= 1
     assert body["conversations_deleted"] >= 1
     assert body["conversation_messages_deleted"] >= 1
+
+
+def test_admin_speech_health_exposes_provider_state() -> None:
+    resp = client.get("/v1/admin/speech/health")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert "provider" in body
+    assert "healthy" in body
+    # Diagnostics surface recent fallback/circuit state.
+    assert "used_fallback" in body
+    assert "circuit_open" in body

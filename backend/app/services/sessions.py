@@ -30,6 +30,7 @@ class CallSession:
     business_id: str = "default_business"
     channel: str = "phone"
     lead_source: str | None = None
+    no_input_count: int = 0
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
@@ -149,6 +150,7 @@ class RedisSessionStore:
             business_id=data.get("business_id", "default_business"),
             channel=data.get("channel", "phone"),
             lead_source=data.get("lead_source"),
+            no_input_count=int(data.get("no_input_count", 0)),
             created_at=created_at or datetime.now(UTC),
             updated_at=updated_at or datetime.now(UTC),
         )
@@ -176,6 +178,7 @@ class RedisSessionStore:
             "business_id": session.business_id,
             "channel": session.channel,
             "lead_source": session.lead_source,
+            "no_input_count": session.no_input_count,
             "created_at": session.created_at.isoformat(),
             "updated_at": session.updated_at.isoformat(),
         }

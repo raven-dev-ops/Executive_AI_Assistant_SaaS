@@ -77,6 +77,8 @@ def test_conversation_emergency_flag_and_followup():
         manager.handle_input(session, "Basement is flooding and sewage backing up")
     )
     assert result.new_state["is_emergency"] is True
+    assert result.new_state.get("emergency_confidence", 0) >= 0.8
+    assert any("keyword" in r for r in result.new_state.get("emergency_reasons", []))
     assert result.new_state["stage"] == "ASK_SCHEDULE"
 
     # Decline scheduling now.
@@ -104,6 +106,28 @@ def test_conversation_greets_returning_customer():
     assert "assistant" in text
     assert "worked with you before" in text
     assert result.new_state["stage"] == "ASK_NAME"
+
+
+def test_conversation_asks_to_confirm_ambiguous_emergency(monkeypatch):
+    monkeypatch.setattr(
+        "app.services.conversation._get_emergency_keywords_for_business",
+        lambda biz: ["urgent"],
+    )
+    session = CallSession(id="test4", caller_phone="555-3333")
+    manager = ConversationManager()
+
+    run(manager.handle_input(session, None))  # greeting
+    run(manager.handle_input(session, "Pat"))  # name
+    run(manager.handle_input(session, "12 Pine Rd, KC MO"))  # address
+
+    result = run(manager.handle_input(session, "There is an urgent smell in basement"))
+    assert "emergency" in result.reply_text.lower()
+    assert "yes or no" in result.reply_text.lower()
+    assert result.new_state.get("emergency_confirmation_pending") is True
+    # After confirming no, should clear pending and not mark emergency.
+    result = run(manager.handle_input(session, "no"))
+    assert result.new_state.get("emergency_confirmation_pending") is False
+    assert result.new_state["is_emergency"] is False
 
 
 def test_conversation_reuses_address_for_returning_customer():

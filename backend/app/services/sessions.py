@@ -23,6 +23,9 @@ class CallSession:
     problem_summary: str | None = None
     requested_time: str | None = None
     is_emergency: bool = False
+    emergency_confidence: float = 0.0
+    emergency_reasons: list[str] = field(default_factory=list)
+    emergency_confirmation_pending: bool = False
     intent: str | None = None
     intent_confidence: float | None = None
     stage: str = "GREETING"

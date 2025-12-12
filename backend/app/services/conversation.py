@@ -44,6 +44,9 @@ EMERGENCY_KEYWORDS = [
     "gas leak",
 ]
 
+AFFIRMATIVE = {"yes", "y", "yeah", "ya", "si", "sí", "sure", "affirmative"}
+NEGATIVE = {"no", "n", "nope"}
+
 
 def _intent_threshold_for_business(business_id: str | None) -> float:
     settings = get_settings()
@@ -80,6 +83,35 @@ def _get_emergency_keywords_for_business(business_id: str | None) -> list[str]:
             if keywords:
                 return keywords
     return EMERGENCY_KEYWORDS
+
+
+def _score_emergency_signal(
+    text: str | None,
+    intent_label: str | None,
+    intent_confidence: float | None,
+    keywords: list[str],
+    existing_confidence: float,
+) -> tuple[float, list[str]]:
+    """Return (confidence, reasons) for emergency detection."""
+
+    if not text:
+        return existing_confidence, []
+
+    lower = text.lower()
+    reasons: list[str] = []
+    confidence = existing_confidence
+
+    if intent_label == "emergency":
+        reasons.append("intent:emergency")
+        confidence = max(confidence, intent_confidence or 0.9, 0.85)
+
+    hits = [kw for kw in keywords if kw in lower]
+    if hits:
+        reasons.extend(f"keyword:{kw}" for kw in hits[:3])
+        keyword_conf = min(0.9, 0.6 + 0.1 * len(hits))
+        confidence = max(confidence, keyword_conf)
+
+    return confidence, reasons
 
 
 def _get_business_name(business_id: str | None) -> str:
@@ -286,6 +318,11 @@ def _session_state(session: CallSession, pending_slot: TimeSlot | None = None) -
         "problem_summary": session.problem_summary,
         "requested_time": session.requested_time,
         "is_emergency": session.is_emergency,
+        "emergency_confidence": getattr(session, "emergency_confidence", 0.0),
+        "emergency_reasons": getattr(session, "emergency_reasons", []),
+        "emergency_confirmation_pending": getattr(
+            session, "emergency_confirmation_pending", False
+        ),
     }
     if pending_slot:
         state["proposed_slot"] = {
@@ -447,8 +484,6 @@ class ConversationManager:
             intent_low_confidence = True
             session.intent = None
         normalized_intent_label = _normalize_intent_label(session.intent)
-        if normalized_intent_label == "emergency":
-            session.is_emergency = True
         conv = conversations_repo.get_by_session(session.id)
         if conv:
             conversations_repo.set_intent(
@@ -475,8 +510,55 @@ class ConversationManager:
 
         # Emergency detection (best-effort, per-tenant keywords).
         emergency_keywords = _get_emergency_keywords_for_business(business_id)
-        if lower and any(keyword in lower for keyword in emergency_keywords):
+
+        # Incorporate user confirmation when pending.
+        if getattr(session, "emergency_confirmation_pending", False) and normalized:
+            norm_simple = normalized.strip().lower()
+            if norm_simple in AFFIRMATIVE:
+                session.is_emergency = True
+                session.emergency_confidence = max(session.emergency_confidence, 0.95)
+                session.emergency_reasons.append("user_confirmed")
+                session.emergency_confirmation_pending = False
+            elif norm_simple in NEGATIVE:
+                session.emergency_confirmation_pending = False
+                session.emergency_confidence = min(session.emergency_confidence, 0.3)
+
+        # Score emergency signals deterministically.
+        emergency_conf, reasons = _score_emergency_signal(
+            normalized, normalized_intent_label, session.intent_confidence, emergency_keywords, getattr(session, "emergency_confidence", 0.0)
+        )
+        if reasons:
+            existing = getattr(session, "emergency_reasons", [])
+            merged = existing + [r for r in reasons if r not in existing]
+            session.emergency_reasons = merged
+        session.emergency_confidence = max(
+            getattr(session, "emergency_confidence", 0.0), emergency_conf
+        )
+        if session.emergency_confidence >= 0.8:
             session.is_emergency = True
+        elif (
+            session.emergency_confidence >= 0.5
+            and not session.is_emergency
+            and not getattr(session, "emergency_confirmation_pending", False)
+            and normalized
+        ):
+            session.emergency_confirmation_pending = True
+            reason_text = (
+                session.emergency_reasons[0]
+                if getattr(session, "emergency_reasons", None)
+                else "details provided"
+            )
+            if language_code == "es":
+                prompt = (
+                    f"Parece que podrA­a ser una emergencia ({reason_text}). "
+                    "iEs una emergencia? Por favor responde SI o NO."
+                )
+            else:
+                prompt = (
+                    f"It sounds like this might be an emergency ({reason_text}). "
+                    "Is this an emergency? Please reply YES or NO."
+                )
+            return ConversationResult(reply_text=prompt, new_state=_session_state(session))
 
         guardrail_action_stages = {"ASK_SCHEDULE", "CONFIRM_SLOT"}
         if normalized and session.stage != "COMPLETED":

@@ -77,6 +77,7 @@ if SQLALCHEMY_AVAILABLE:
         qbo_token_expires_at = Column(DateTime, nullable=True)  # type: ignore[call-arg]
         onboarding_step = Column(String(64), nullable=True)  # type: ignore[call-arg]
         onboarding_completed = Column(Boolean, default=False)  # type: ignore[call-arg]
+        lockdown_mode = Column(Boolean, nullable=True)  # type: ignore[call-arg]
         stripe_customer_id = Column(String(255), nullable=True)  # type: ignore[call-arg]
         stripe_subscription_id = Column(String(255), nullable=True)  # type: ignore[call-arg]
         subscription_status = Column(String(64), nullable=True)  # type: ignore[call-arg]

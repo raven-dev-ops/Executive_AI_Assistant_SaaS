@@ -290,6 +290,10 @@ def init_db() -> None:
                     conn.exec_driver_sql(
                         "ALTER TABLE businesses ADD COLUMN owner_email_alerts_enabled BOOLEAN NULL"
                     )
+                if "lockdown_mode" not in cols:
+                    conn.exec_driver_sql(
+                        "ALTER TABLE businesses ADD COLUMN lockdown_mode BOOLEAN NULL"
+                    )
                 if "gmail_access_token" not in cols:
                     conn.exec_driver_sql(
                         "ALTER TABLE businesses ADD COLUMN gmail_access_token TEXT NULL"

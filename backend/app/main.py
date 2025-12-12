@@ -39,7 +39,27 @@ from .routers import (
     telephony,
     twilio_integration,
     voice,
-)
+    )
+
+
+def _is_business_locked(business_id: str) -> bool:
+    """Return True when the tenant is in lockdown mode (DB-backed flag)."""
+    if not (SQLALCHEMY_AVAILABLE and SessionLocal is not None):
+        return False
+    from .db_models import BusinessDB  # local import to avoid circular deps
+    session_db = SessionLocal()
+    try:
+        row = session_db.get(BusinessDB, business_id)
+        if row is None:
+            return False
+        return bool(getattr(row, "lockdown_mode", False))
+    except Exception:
+        logging.getLogger(__name__).warning(
+            "lockdown_check_failed", exc_info=True, extra={"business_id": business_id}
+        )
+        return False
+    finally:
+        session_db.close()
 
 
 def create_app() -> FastAPI:
@@ -226,27 +246,65 @@ def create_app() -> FastAPI:
         route_metrics.request_count += 1
         start = time.time()
 
-        # Rate limiting on auth/chat/webhooks/voice paths unless explicitly exempted.
-        if path not in exempt_paths and path.startswith(
-            (
-                "/v1/auth",
-                "/v1/chat",
-                "/twilio/",
-                "/v1/twilio/",
-                "/telephony/",
-                "/v1/telephony/",
-                "/v1/voice/",
-            )
-        ):
+        guarded_prefixes = (
+            "/v1/auth",
+            "/v1/chat",
+            "/v1/widget",
+            "/twilio/",
+            "/v1/twilio/",
+            "/telephony/",
+            "/v1/telephony/",
+            "/v1/voice/",
+        )
+        if path not in exempt_paths and path.startswith(guarded_prefixes):
             client_ip = request.client.host if request.client else "unknown"
+            business_id = None
+            try:
+                # Best-effort resolve tenant so per-tenant buckets can be enforced.
+                from . import deps as _deps  # local import
+
+                business_id = await _deps.get_business_id(request)  # type: ignore[arg-type]
+            except Exception:
+                business_id = None
+
+            # Lockdown mode halts automation/widget/voice flows per tenant.
+            if business_id and _is_business_locked(business_id):
+                metrics.total_errors += 1
+                route_metrics.error_count += 1
+                response = Response(
+                    status_code=423,
+                    content="Tenant is in lockdown mode. Automation is paused.",
+                )
+                await record_audit_event(request, response.status_code)
+                if security_headers_enabled:
+                    _apply_security_headers(
+                        response,
+                        security_csp,
+                        security_hsts_enabled,
+                        security_hsts_max_age,
+                    )
+                return response
+
             api_key = request.headers.get("X-API-Key") or request.headers.get(
                 "X-Widget-Token"
             )
+            bucket_key = f"{business_id or 'anon'}:{api_key or 'anon'}"
+            ip_key = f"ip:{client_ip}"
             try:
-                rate_limiter.check(key=f"{client_ip}:{api_key or 'anon'}")
+                rate_limiter.check(key=bucket_key)
+                rate_limiter.check(key=ip_key)
             except RateLimitError as exc:
                 metrics.total_errors += 1
                 route_metrics.error_count += 1
+                metrics.rate_limit_blocks_total += 1
+                metrics.rate_limit_blocks_by_business[
+                    business_id or "unknown"
+                ] = metrics.rate_limit_blocks_by_business.get(
+                    business_id or "unknown", 0
+                ) + 1
+                metrics.rate_limit_blocks_by_ip[client_ip] = (
+                    metrics.rate_limit_blocks_by_ip.get(client_ip, 0) + 1
+                )
                 response = Response(
                     status_code=429,
                     content="Rate limit exceeded. Please retry later.",

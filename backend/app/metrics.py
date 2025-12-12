@@ -96,6 +96,9 @@ class Metrics:
     job_queue_failed: int = 0
     speech_circuit_trips: int = 0
     speech_alerted_businesses: set[str] = field(default_factory=set)
+    rate_limit_blocks_total: int = 0
+    rate_limit_blocks_by_business: Dict[str, int] = field(default_factory=dict)
+    rate_limit_blocks_by_ip: Dict[str, int] = field(default_factory=dict)
     sms_by_business: Dict[str, BusinessSmsMetrics] = field(default_factory=dict)
     twilio_voice_requests: int = 0
     twilio_voice_errors: int = 0
@@ -203,6 +206,9 @@ class Metrics:
             "job_queue_failed": self.job_queue_failed,
             "speech_circuit_trips": self.speech_circuit_trips,
             "speech_alerted_businesses": list(self.speech_alerted_businesses),
+            "rate_limit_blocks_total": self.rate_limit_blocks_total,
+            "rate_limit_blocks_by_business": dict(self.rate_limit_blocks_by_business),
+            "rate_limit_blocks_by_ip": dict(self.rate_limit_blocks_by_ip),
             "billing_webhook_failures": self.billing_webhook_failures,
             "background_job_errors": self.background_job_errors,
             "retention_purge_runs": self.retention_purge_runs,

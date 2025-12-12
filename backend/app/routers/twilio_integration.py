@@ -470,7 +470,7 @@ async def twilio_voice(
                 # Detect calls that dropped before the assistant finished intake.
                 if session is not None:
                     status_val = (getattr(session, "status", "") or "").upper()
-                    if status_val not in {"SCHEDULED", "PENDING_FOLLOWUP", "COMPLETED"}:
+                    if status_val not in conversation.ALLOWED_TERMINAL_STATUSES:
                         is_partial_lead = True
                 sessions.session_store.end(link.session_id)
             from ..metrics import CallbackItem, metrics as _metrics  # local import
@@ -1201,11 +1201,7 @@ async def twilio_voice_stream(
     event = (payload.event or "").lower()
     if event == "stop":
         status_val = (getattr(session_obj, "status", "") or "").upper()
-        is_partial_lead = status_val not in {
-            "SCHEDULED",
-            "PENDING_FOLLOWUP",
-            "COMPLETED",
-        }
+        is_partial_lead = status_val not in conversation.ALLOWED_TERMINAL_STATUSES
         phone = payload.from_number or ""
         lead_source = getattr(session_obj, "lead_source", None) or payload.lead_source
         if phone and (is_partial_lead or not session_obj):

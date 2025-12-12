@@ -18,6 +18,7 @@ from app.services.conversation import (
 from app.services.email_service import EmailResult
 from app.services.calendar import TimeSlot
 from app.services.sessions import CallSession
+from app.metrics import metrics
 from app.repositories import customers_repo
 
 
@@ -346,9 +347,59 @@ def test_conversation_handles_unknown_stage_gracefully():
     session = CallSession(id="unknown1", stage="UNKNOWN")
     manager = ConversationManager()
     result = run(manager.handle_input(session, "hi"))
-    # Unknown stages should leave state unchanged; ensure we don't crash and return text.
+    # Unknown stages should be finalized safely with a terminal status.
     assert result.reply_text
-    assert result.new_state["stage"] == "UNKNOWN"
+    assert result.new_state["stage"] == "COMPLETED"
+    assert result.new_state["status"] == "ABANDONED"
+
+
+def test_conversation_low_confidence_handoff_enqueues_callback(monkeypatch):
+    metrics.callbacks_by_business.clear()
+    session = CallSession(
+        id="low-conf",
+        stage="ASK_SCHEDULE",
+        caller_phone="555-3333",
+        business_id="biz-guard",
+    )
+    session.problem_summary = "leak"
+    session.address = "123 Main St"
+    manager = ConversationManager()
+
+    async def low_conf_classifier(*args, **kwargs):
+        return {"intent": "schedule", "confidence": 0.1, "provider": "heuristic"}
+
+    import app.services.conversation as conversation_mod
+
+    monkeypatch.setattr(
+        conversation_mod, "classify_intent_with_metadata", low_conf_classifier
+    )
+
+    result = run(manager.handle_input(session, "uncertain audio"))
+    assert result.new_state["stage"] == "COMPLETED"
+    assert result.new_state["status"] == "PENDING_FOLLOWUP"
+    queue = metrics.callbacks_by_business.get("biz-guard", {})
+    assert "555-3333" in queue
+    assert queue["555-3333"].reason == "LOW_CONFIDENCE"
+    metrics.callbacks_by_business.clear()
+
+
+def test_conversation_requires_address_before_searching_slots(monkeypatch):
+    session = CallSession(
+        id="ask-address-guard",
+        stage="ASK_SCHEDULE",
+        business_id="biz-guard2",
+    )
+    session.problem_summary = "leak"
+
+    async def fail_find_slots(*args, **kwargs):
+        raise AssertionError("find_slots should not be called without address")
+
+    monkeypatch.setattr(calendar_service, "find_slots", fail_find_slots)
+
+    manager = ConversationManager()
+    result = run(manager.handle_input(session, "yes please"))
+    assert result.new_state["stage"] == "ASK_ADDRESS"
+    assert "address" in result.reply_text.lower()
 
 
 def test_conversation_ask_schedule_decline_sets_pending_followup(monkeypatch):

@@ -19,7 +19,7 @@ from . import subscription as subscription_service
 from ..config import get_settings
 from ..db import SQLALCHEMY_AVAILABLE, SessionLocal
 from ..db_models import BusinessDB
-from ..metrics import metrics
+from ..metrics import CallbackItem, metrics
 from ..repositories import appointments_repo, customers_repo, conversations_repo
 from ..business_config import (
     get_calendar_id_for_business,
@@ -249,6 +249,32 @@ class ConversationResult:
     new_state: dict
 
 
+ALLOWED_ASSISTANT_INTENTS = {
+    "schedule",
+    "reschedule",
+    "cancel",
+    "faq",
+    "emergency",
+    "fallback",
+    "greeting",
+    "other",
+}
+ALLOWED_TERMINAL_STATUSES = {
+    "SCHEDULED",
+    "PENDING_FOLLOWUP",
+    "COMPLETED",
+    "ABANDONED",
+    "CANCELLED",
+}
+
+
+def _normalize_intent_label(intent: str | None) -> str | None:
+    """Return a guard-railed intent label, coercing unknowns to fallback."""
+    if not intent:
+        return None
+    return intent if intent in ALLOWED_ASSISTANT_INTENTS else "fallback"
+
+
 def _session_state(session: CallSession, pending_slot: TimeSlot | None = None) -> dict:
     state: dict = {
         "session_id": session.id,
@@ -267,6 +293,77 @@ def _session_state(session: CallSession, pending_slot: TimeSlot | None = None) -
             "end": pending_slot.end.isoformat(),
         }
     return state
+
+
+def _enqueue_callback_followup(
+    session: CallSession,
+    business_id: str,
+    reason: str,
+) -> None:
+    """Ensure the caller is queued for manual follow-up/callback."""
+    phone = session.caller_phone or session.id
+    if not phone:
+        return
+    queue = metrics.callbacks_by_business.setdefault(business_id, {})
+    now = datetime.now(UTC)
+    existing = queue.get(phone)
+    channel = getattr(session, "channel", "phone") or "phone"
+    lead_source = getattr(session, "lead_source", None)
+    if existing is None:
+        queue[phone] = CallbackItem(
+            phone=phone,
+            first_seen=now,
+            last_seen=now,
+            count=1,
+            channel=channel,
+            lead_source=lead_source,
+            reason=reason,
+        )
+        return
+    existing.last_seen = now
+    existing.count += 1
+    existing.reason = reason or existing.reason
+    existing.channel = channel or existing.channel
+    if lead_source:
+        existing.lead_source = lead_source
+    if getattr(existing, "status", "PENDING").upper() != "PENDING":
+        existing.status = "PENDING"
+        existing.last_result = None
+
+
+def _ensure_terminal_status(session: CallSession) -> None:
+    """Force terminal status into the allowed set when the stage is complete."""
+    if session.stage == "COMPLETED" and session.status not in ALLOWED_TERMINAL_STATUSES:
+        session.status = "ABANDONED"
+
+
+def _handoff_to_human(
+    session: CallSession,
+    business_id: str,
+    language_code: str,
+    *,
+    reason: str,
+) -> ConversationResult:
+    """Escalate to manual follow-up with a deterministic terminal state."""
+    _enqueue_callback_followup(session, business_id, reason=reason)
+    session.stage = "COMPLETED"
+    session.status = "PENDING_FOLLOWUP"
+    if language_code == "es":
+        reply = (
+            "Para asegurarme de que tu solicitud no se pierda, harA© que alguien del equipo te llame pronto. "
+            "Si prefieres, puedes dejar un breve buzA3n de voz con tu nombre y direcciA3n."
+        )
+        if session.is_emergency:
+            reply += " Si se trata de una emergencia con riesgo para la vida, llama al 911 o a tu nA§mero local."
+    else:
+        reply = (
+            "To be safe, I'll hand this off to the team for a quick call back. "
+            "You can also leave a short voicemail with your name and address."
+        )
+        if session.is_emergency:
+            reply += " If this is life-threatening, hang up and call 911."
+    _ensure_terminal_status(session)
+    return ConversationResult(reply_text=reply, new_state=_session_state(session))
 
 
 class ConversationManager:
@@ -312,6 +409,8 @@ class ConversationManager:
             getattr(session, "business_id", "default_business") or "default_business"
         )
         intent_meta = None
+        classified_intent: str | None = None
+        intent_low_confidence = False
         history: list[str] = []
         conv = conversations_repo.get_by_session(session.id)
         if conv and getattr(conv, "messages", None):
@@ -325,7 +424,8 @@ class ConversationManager:
                 intent_meta = await classify_intent_with_metadata(
                     normalized, business_id, history=history
                 )
-                session.intent = intent_meta["intent"]
+                classified_intent = intent_meta["intent"]
+                session.intent = classified_intent
                 session.intent_confidence = intent_meta.get("confidence")
                 logger.debug(
                     "intent_classified",
@@ -344,8 +444,10 @@ class ConversationManager:
             getattr(session, "intent_confidence", None) is not None
             and session.intent_confidence < threshold
         ):
+            intent_low_confidence = True
             session.intent = None
-        if session.intent == "emergency":
+        normalized_intent_label = _normalize_intent_label(session.intent)
+        if normalized_intent_label == "emergency":
             session.is_emergency = True
         conv = conversations_repo.get_by_session(session.id)
         if conv:
@@ -375,6 +477,34 @@ class ConversationManager:
         emergency_keywords = _get_emergency_keywords_for_business(business_id)
         if lower and any(keyword in lower for keyword in emergency_keywords):
             session.is_emergency = True
+
+        guardrail_action_stages = {"ASK_SCHEDULE", "CONFIRM_SLOT"}
+        if normalized and session.stage != "COMPLETED":
+            if (
+                intent_low_confidence
+                and session.stage in guardrail_action_stages
+                and classified_intent not in {"other", "greeting"}
+            ):
+                return _handoff_to_human(
+                    session, business_id, language_code, reason="LOW_CONFIDENCE"
+                )
+            if normalized_intent_label in {"cancel", "reschedule", "faq"}:
+                return _handoff_to_human(
+                    session,
+                    business_id,
+                    language_code,
+                    reason=(normalized_intent_label or "FALLBACK").upper(),
+                )
+            if (
+                normalized_intent_label == "fallback"
+                and session.stage in guardrail_action_stages
+            ):
+                return _handoff_to_human(
+                    session,
+                    business_id,
+                    language_code,
+                    reason="FALLBACK",
+                )
 
         # Initial greeting.
         if session.stage == "GREETING":
@@ -604,6 +734,19 @@ class ConversationManager:
                 return ConversationResult(
                     reply_text=reply, new_state=_session_state(session)
                 )
+            if not session.address:
+                session.stage = "ASK_ADDRESS"
+                if language_code == "es":
+                    reply = (
+                        "Antes de buscar horarios, necesito la direcciA3n completa del servicio."
+                    )
+                else:
+                    reply = (
+                        "Before I look for times, I need the full service address for this visit."
+                    )
+                return ConversationResult(
+                    reply_text=reply, new_state=_session_state(session)
+                )
 
             # Any non-negative response is treated as consent to search for a slot.
             duration_minutes = _infer_duration_minutes(
@@ -671,6 +814,13 @@ class ConversationManager:
                     reply_text=reply, new_state=_session_state(session)
                 )
 
+            if not session.address:
+                return _handoff_to_human(
+                    session,
+                    business_id,
+                    language_code,
+                    reason="MISSING_ADDRESS",
+                )
             # Confirm the proposed slot and create the appointment.
             duration_minutes = _infer_duration_minutes(
                 session.problem_summary,
@@ -869,6 +1019,8 @@ class ConversationManager:
             )
 
         # Fallback for completed or unknown stages.
+        session.stage = "COMPLETED"
+        _ensure_terminal_status(session)
         if language_code == "es":
             reply = "Esta sesión parece completa. Si necesitas algo más, por favor vuelve a llamar."
         else:

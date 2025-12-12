@@ -84,6 +84,7 @@ Docs & references
 - Dev workflow: `DEV_WORKFLOW.md`, `TOOLS.md`.  
 - Incident playbooks: `INCIDENT_RESPONSE.md`, `POST_INCIDENT_TEMPLATE.md`.
 - Closed beta Definition of Done: `BETA_DOD.md` (linked from planner and dashboard planner view).
+- Closed beta KPIs: `BETA_KPIS.md` (top-10 metrics and where to view them).
 
 New in this iteration
 ---------------------

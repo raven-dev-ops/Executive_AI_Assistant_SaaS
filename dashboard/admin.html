@@ -702,6 +702,50 @@
           <button id="refresh-tenants" type="button" style="width: 100%; margin-top: 1rem;">Refresh Tenants</button>
         </div>
 
+        <!-- Beta Health -->
+        <div class="card" style="grid-column: span 2;" id="beta-health-card">
+          <div class="card-header">
+            <div class="card-icon warn">
+              <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path d="M1 21h22L12 2 1 21zm12-3h-2v2h2v-2zm0-8h-2v6h2V10z"/>
+              </svg>
+            </div>
+            <h2>Beta Health (KPIs)</h2>
+          </div>
+          <div id="beta-health-content" class="info-grid">
+            <div class="info-item">
+              <div class="info-label">Call answer rate</div>
+              <div class="info-value" id="beta-call-answer">--</div>
+              <div class="info-sub" id="beta-call-answer-sub">Waiting for usage data</div>
+            </div>
+            <div class="info-item">
+              <div class="info-label">Booking rate</div>
+              <div class="info-value" id="beta-booking-rate">--</div>
+              <div class="info-sub" id="beta-booking-sub">Appointments vs conversations</div>
+            </div>
+            <div class="info-item">
+              <div class="info-label">Emergency capture</div>
+              <div class="info-value" id="beta-emergency-capture">--</div>
+              <div class="info-sub" id="beta-emergency-sub">Emergencies tagged/booked</div>
+            </div>
+            <div class="info-item">
+              <div class="info-label">Pending reschedules</div>
+              <div class="info-value" id="beta-reschedules">--</div>
+              <div class="info-sub">Across all tenants</div>
+            </div>
+            <div class="info-item">
+              <div class="info-label">SMS opt-out rate</div>
+              <div class="info-value" id="beta-optout-rate">--</div>
+              <div class="info-sub">Customers opted out / total</div>
+            </div>
+            <div class="info-item">
+              <div class="info-label">Active tenants</div>
+              <div class="info-value" id="beta-active-tenants">--</div>
+              <div class="info-sub" id="beta-last-activity">Last activity n/a</div>
+            </div>
+          </div>
+        </div>
+
         <!-- Tenant Usage -->
         <div class="card" style="grid-column: span 2;">
           <div class="card-header">
@@ -1127,10 +1171,78 @@
             });
           }
           renderUsageTable();
+          renderBetaHealth();
         } catch (err) {
           console.error("loadUsage failed", err);
           el.innerHTML = '<div class="empty-state"><p>Unable to load usage data</p><small>' + escapeHtml(err.message || err) + "</small></div>";
+          const beta = document.getElementById("beta-health-content");
+          if (beta) beta.innerHTML = '<div class="empty-state">Unable to load usage for beta KPIs.</div>';
         }
+      }
+
+      function renderBetaHealth() {
+        const el = document.getElementById("beta-health-content");
+        if (!el) return;
+        if (!Array.isArray(usageCache) || !usageCache.length) {
+          el.innerHTML = '<div class="empty-state" style="grid-column: span 3;">Load usage to see beta KPIs.</div>';
+          return;
+        }
+        const sum = (items, key) => items.reduce((acc, cur) => acc + (Number(cur?.[key] || 0) || 0), 0);
+        const totalVoice = sum(usageCache, "twilio_voice_requests");
+        const voiceErr = sum(usageCache, "twilio_voice_errors");
+        const totalAppts = sum(usageCache, "total_appointments");
+        const totalConv = sum(usageCache, "total_conversations");
+        const emergAppts = sum(usageCache, "emergency_appointments");
+        const emergConv = sum(usageCache, "emergency_conversations");
+        const reschedules = sum(usageCache, "pending_reschedules");
+        const totalCustomers = sum(usageCache, "total_customers");
+        const optOuts = sum(usageCache, "sms_opt_out_customers");
+        const activeTenants = usageCache.length;
+        const lastActivity = usageCache
+          .map((u) => new Date(u.last_activity_at || 0))
+          .filter((d) => d.getTime() > 0)
+          .sort((a, b) => b.getTime() - a.getTime())[0];
+
+        const callAnswerRate = totalVoice > 0 ? 1 - voiceErr / totalVoice : null;
+        const bookingRate = totalConv > 0 ? totalAppts / totalConv : null;
+        const emergencyCapture = emergConv > 0 ? emergAppts / emergConv : null;
+        const optOutRate = totalCustomers > 0 ? optOuts / totalCustomers : null;
+
+        const pct = (val) => (val === null ? "n/a" : `${(val * 100).toFixed(1)}%`);
+        const asInt = (val) => (val === null || Number.isNaN(val) ? "n/a" : String(val));
+
+        const setVal = (id, value) => {
+          const el = document.getElementById(id);
+          if (el) el.textContent = value;
+        };
+
+        setVal("beta-call-answer", pct(callAnswerRate));
+        setVal("beta-booking-rate", pct(bookingRate));
+        setVal("beta-emergency-capture", pct(emergencyCapture));
+        setVal("beta-reschedules", asInt(reschedules));
+        setVal("beta-optout-rate", pct(optOutRate));
+        setVal("beta-active-tenants", String(activeTenants));
+        setVal(
+          "beta-last-activity",
+          lastActivity ? `Last activity: ${lastActivity.toLocaleString()}` : "Last activity n/a"
+        );
+
+        const setSub = (id, text) => {
+          const el = document.getElementById(id);
+          if (el) el.textContent = text;
+        };
+        setSub(
+          "beta-call-answer-sub",
+          totalVoice > 0 ? `${voiceErr} errors of ${totalVoice} voice requests` : "No voice traffic yet"
+        );
+        setSub(
+          "beta-booking-sub",
+          totalConv > 0 ? `${totalAppts} appts / ${totalConv} conversations` : "No conversations yet"
+        );
+        setSub(
+          "beta-emergency-sub",
+          emergConv > 0 ? `${emergAppts} emergencies booked of ${emergConv} emergency conv.` : "No emergency conv."
+        );
       }
 
       async function loadTwilioHealth() {

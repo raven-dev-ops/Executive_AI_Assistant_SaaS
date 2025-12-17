@@ -23,19 +23,28 @@ Quick Start (local dev)
    #   docker-compose up --build
    ```
 
-2) Owner dashboard  
+2) Frontend (TypeScript, WIP)
+   ```bash
+   cd frontend
+   npm install
+   npm run dev
+   ```
+   - Use the Settings panel to set `X-API-Key` / `X-Owner-Token` / `X-Admin-API-Key`.
+   - Leave “API Base URL” blank to use the Vite dev proxy (recommended for local dev).
+
+3) Owner dashboard (static HTML)  
    - Open `dashboard/index.html` (file:// or `python -m http.server` from repo root).  
    - Set `X-API-Key` and `X-Owner-Token` from your tenant (`/v1/admin/businesses`).  
    - Quick investor view: `/planner` serves the PLANNER.md HTML; `dashboard/planner.html` embeds it alongside owner/admin links.
 
-3) Admin dashboard (optional)  
+4) Admin dashboard (static HTML, optional)  
    - Open `dashboard/admin.html`; supply `X-Admin-API-Key`.  
    - Use Tenants, Usage, Twilio/Stripe health cards to verify config.
 
-4) Self-service signup/onboarding (optional)  
+5) Self-service signup/onboarding (optional)  
    - Set `ALLOW_SELF_SIGNUP=true`; open `dashboard/signup.html` then `dashboard/onboarding.html` to connect calendar/email/QBO stubs.
 
-5) Owner AI assistant  
+6) Owner AI assistant  
    - Ask questions via the floating chat bubble.  
    - Rich answers require `SPEECH_PROVIDER=openai` and `OPENAI_API_KEY`; otherwise you get a metrics snapshot fallback.
 

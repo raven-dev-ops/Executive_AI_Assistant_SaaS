@@ -73,6 +73,7 @@ def test_auth_callback_rejects_unsupported_provider() -> None:
 def test_auth_start_uses_signed_state_when_not_testing(monkeypatch) -> None:
     from app.routers import auth_integration
     from app.services.oauth_state import decode_state
+    from urllib.parse import parse_qs, urlparse
 
     class DummyOAuth:
         def __init__(self) -> None:
@@ -96,8 +97,9 @@ def test_auth_start_uses_signed_state_when_not_testing(monkeypatch) -> None:
     resp = client.get(f"/auth/gcalendar/start?business_id={business_id}")
     assert resp.status_code == 200
     authorization_url = resp.json()["authorization_url"]
-    assert "state=" in authorization_url
-    state = authorization_url.split("state=", 1)[1]
+    parsed = urlparse(authorization_url)
+    state = parse_qs(parsed.query).get("state", [None])[0]
+    assert state
     assert state != business_id
 
     decoded_business_id, decoded_provider = decode_state(state, "secret")
@@ -155,6 +157,9 @@ def test_auth_callback_rejects_provider_mismatch(monkeypatch) -> None:
 
     business_id = _get_default_business_id()
     state = encode_state(business_id, "gmail", "secret")
-    resp = client.get(f"/auth/gcalendar/callback?state={state}&code=dummy")
+    resp = client.get(
+        "/auth/gcalendar/callback",
+        params={"state": state, "code": "dummy"},
+    )
     assert resp.status_code == 400
     assert resp.json()["detail"] == "State provider mismatch"

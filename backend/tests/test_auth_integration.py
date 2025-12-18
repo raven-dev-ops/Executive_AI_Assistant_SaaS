@@ -79,23 +79,7 @@ def test_auth_start_uses_signed_state_when_not_testing(monkeypatch) -> None:
     from app.services.oauth_state import decode_state
     from urllib.parse import parse_qs, urlparse
 
-    class DummyOAuth:
-        def __init__(self) -> None:
-            self.state_secret = "secret"
-            self.redirect_base = "https://example.com/auth"
-            self.linkedin_client_id = None
-            self.linkedin_scopes = "r_liteprofile"
-            self.google_client_id = None
-            self.google_client_secret = None
-            self.gmail_scopes = "gmail.readonly"
-            self.gcalendar_scopes = "calendar"
-
-    class DummySettings:
-        def __init__(self) -> None:
-            self.oauth = DummyOAuth()
-
     monkeypatch.setattr(auth_integration, "_is_testing_mode", lambda: False)
-    monkeypatch.setattr(auth_integration, "get_settings", lambda: DummySettings())
 
     business_id = _get_default_business_id()
     resp = client.get(f"/auth/gcalendar/start?business_id={business_id}")
@@ -106,7 +90,9 @@ def test_auth_start_uses_signed_state_when_not_testing(monkeypatch) -> None:
     assert state
     assert state != business_id
 
-    decoded_business_id, decoded_provider = decode_state(state, "secret")
+    settings = auth_integration.get_settings()
+    secret = getattr(settings.oauth, "state_secret", "") or ""
+    decoded_business_id, decoded_provider = decode_state(state, secret)
     assert decoded_business_id == business_id
     assert decoded_provider == "gcalendar"
 
@@ -114,23 +100,7 @@ def test_auth_start_uses_signed_state_when_not_testing(monkeypatch) -> None:
 def test_auth_callback_rejects_invalid_state_when_not_testing(monkeypatch) -> None:
     from app.routers import auth_integration
 
-    class DummyOAuth:
-        def __init__(self) -> None:
-            self.state_secret = "secret"
-            self.redirect_base = "https://example.com/auth"
-            self.linkedin_client_id = None
-            self.linkedin_scopes = "r_liteprofile"
-            self.google_client_id = None
-            self.google_client_secret = None
-            self.gmail_scopes = "gmail.readonly"
-            self.gcalendar_scopes = "calendar"
-
-    class DummySettings:
-        def __init__(self) -> None:
-            self.oauth = DummyOAuth()
-
     monkeypatch.setattr(auth_integration, "_is_testing_mode", lambda: False)
-    monkeypatch.setattr(auth_integration, "get_settings", lambda: DummySettings())
 
     resp = client.get("/auth/gcalendar/callback?state=invalid&code=dummy")
     assert resp.status_code == 400
@@ -141,26 +111,12 @@ def test_auth_callback_rejects_provider_mismatch(monkeypatch) -> None:
     from app.routers import auth_integration
     from app.services.oauth_state import encode_state
 
-    class DummyOAuth:
-        def __init__(self) -> None:
-            self.state_secret = "secret"
-            self.redirect_base = "https://example.com/auth"
-            self.linkedin_client_id = None
-            self.linkedin_scopes = "r_liteprofile"
-            self.google_client_id = None
-            self.google_client_secret = None
-            self.gmail_scopes = "gmail.readonly"
-            self.gcalendar_scopes = "calendar"
-
-    class DummySettings:
-        def __init__(self) -> None:
-            self.oauth = DummyOAuth()
-
     monkeypatch.setattr(auth_integration, "_is_testing_mode", lambda: False)
-    monkeypatch.setattr(auth_integration, "get_settings", lambda: DummySettings())
 
     business_id = _get_default_business_id()
-    state = encode_state(business_id, "gmail", "secret")
+    settings = auth_integration.get_settings()
+    secret = getattr(settings.oauth, "state_secret", "") or ""
+    state = encode_state(business_id, "gmail", secret)
     with pytest.raises(HTTPException) as excinfo:
         asyncio.run(
             auth_integration.auth_callback(

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import base64
 from abc import ABC, abstractmethod
 import logging
@@ -64,14 +65,11 @@ class OpenAISpeechProvider(SpeechProvider):
         data = {"model": self._settings.openai_stt_model}
         files = {"file": ("audio.wav", audio_bytes, "audio/wav")}
 
-        try:
-            timeout = httpx.Timeout(12.0, connect=6.0)
-            async with httpx.AsyncClient(timeout=timeout) as client:
-                resp = await client.post(url, headers=headers, data=data, files=files)
-                resp.raise_for_status()
-                data = resp.json()
-        except Exception:
-            return ""
+        timeout = httpx.Timeout(12.0, connect=6.0)
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            resp = await client.post(url, headers=headers, data=data, files=files)
+            resp.raise_for_status()
+            data = resp.json()
 
         text = data.get("text")
         return text or ""
@@ -92,15 +90,11 @@ class OpenAISpeechProvider(SpeechProvider):
             "voice": voice or self._settings.openai_tts_voice,
             "input": text,
         }
-        try:
-            timeout = httpx.Timeout(12.0, connect=6.0)
-            async with httpx.AsyncClient(timeout=timeout) as client:
-                resp = await client.post(url, headers=headers, json=payload)
-                resp.raise_for_status()
-                audio_bytes = resp.content
-        except Exception:
-            # Fall back to placeholder if the external call fails.
-            return "audio://placeholder"
+        timeout = httpx.Timeout(12.0, connect=6.0)
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            resp = await client.post(url, headers=headers, json=payload)
+            resp.raise_for_status()
+            audio_bytes = resp.content
 
         # Return base64-encoded audio so callers can decode/playback or pass it
         # on to another system (e.g. telephony or web client).
@@ -120,6 +114,204 @@ class OpenAISpeechProvider(SpeechProvider):
             timeout = httpx.Timeout(4.0, connect=2.0)
             async with httpx.AsyncClient(timeout=timeout) as client:
                 resp = await client.get(url, headers=headers, params={"limit": 1})
+                resp.raise_for_status()
+            return {"healthy": True, "provider": self.name}
+        except Exception as exc:  # pragma: no cover - network dependent
+            return {
+                "healthy": False,
+                "provider": self.name,
+                "reason": "unreachable",
+                "detail": str(exc),
+            }
+
+
+class GoogleCloudSpeechProvider(SpeechProvider):
+    """Google Cloud Speech-to-Text + Text-to-Speech via REST APIs.
+
+    This uses Application Default Credentials (ADC). In Cloud Run / GCE, ADC
+    is provided automatically; in local development set GOOGLE_APPLICATION_CREDENTIALS.
+    """
+
+    name = "gcp"
+
+    _SCOPE = "https://www.googleapis.com/auth/cloud-platform"
+
+    def __init__(self, settings: SpeechSettings) -> None:
+        self._settings = settings
+        self._credentials = None
+        self._token_lock = asyncio.Lock()
+
+    def _ensure_credentials(self) -> None:
+        if self._credentials is not None:
+            return
+        try:
+            import google.auth
+        except Exception as exc:  # pragma: no cover - optional dependency
+            raise RuntimeError(
+                "google-auth is required for GCP speech provider"
+            ) from exc
+        creds, _project = google.auth.default(scopes=[self._SCOPE])
+        self._credentials = creds
+
+    async def _access_token(self) -> str:
+        self._ensure_credentials()
+        creds = self._credentials
+        if creds is None:  # pragma: no cover - defensive
+            raise RuntimeError("GCP credentials unavailable")
+
+        expiry = getattr(creds, "expiry", None)
+        token = getattr(creds, "token", None)
+        now = time.time()
+        # Refresh when token is missing or expiring soon (best effort).
+        exp_ts = None
+        if expiry is not None:
+            try:
+                exp_ts = expiry.timestamp()
+            except Exception:
+                exp_ts = None
+        if token and exp_ts and exp_ts - now > 60:
+            return str(token)
+
+        async with self._token_lock:
+            expiry = getattr(creds, "expiry", None)
+            token = getattr(creds, "token", None)
+            exp_ts = None
+            if expiry is not None:
+                try:
+                    exp_ts = expiry.timestamp()
+                except Exception:
+                    exp_ts = None
+            if token and exp_ts and exp_ts - time.time() > 60:
+                return str(token)
+
+            def _refresh_sync() -> str:
+                try:
+                    from google.auth.transport.requests import Request as AuthRequest
+                except Exception:
+                    try:
+                        from google.auth.transport.urllib3 import Request as AuthRequest
+                    except Exception as exc:
+                        raise RuntimeError(
+                            "google-auth transport is required for GCP speech provider"
+                        ) from exc
+                creds.refresh(AuthRequest())
+                new_token = getattr(creds, "token", None)
+                if not new_token:
+                    raise RuntimeError("Unable to refresh GCP access token")
+                return str(new_token)
+
+            return await asyncio.to_thread(_refresh_sync)
+
+    def _stt_language_code(self) -> str:
+        return (self._settings.gcp_language_code or "en-US").strip() or "en-US"
+
+    def _tts_language_code(self) -> str:
+        return (self._settings.gcp_language_code or "en-US").strip() or "en-US"
+
+    def _parse_wav_sample_rate(self, audio_bytes: bytes) -> int | None:
+        if len(audio_bytes) < 28:
+            return None
+        if not (audio_bytes[0:4] == b"RIFF" and audio_bytes[8:12] == b"WAVE"):
+            return None
+        # Sample rate is at byte offset 24 (little-endian uint32) for PCM WAV.
+        try:
+            return int.from_bytes(audio_bytes[24:28], "little")
+        except Exception:
+            return None
+
+    async def transcribe(self, audio: str | None) -> str:
+        if not audio or audio.startswith("audio://"):
+            return ""
+        try:
+            audio_bytes = base64.b64decode(audio, validate=True)
+        except Exception:
+            return ""
+
+        token = await self._access_token()
+        url = "https://speech.googleapis.com/v1/speech:recognize"
+        sample_rate = self._parse_wav_sample_rate(audio_bytes) or 8000
+        payload = {
+            "config": {
+                "encoding": "LINEAR16",
+                "sampleRateHertz": sample_rate,
+                "languageCode": self._stt_language_code(),
+                "enableAutomaticPunctuation": True,
+                "model": (self._settings.gcp_stt_model or "default"),
+            },
+            "audio": {"content": audio},
+        }
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+        }
+        timeout = httpx.Timeout(self._settings.gcp_timeout_seconds, connect=6.0)
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            resp = await client.post(url, headers=headers, json=payload)
+            resp.raise_for_status()
+            data = resp.json()
+
+        transcripts: list[str] = []
+        for result in data.get("results") or []:
+            alternatives = result.get("alternatives") or []
+            if not alternatives:
+                continue
+            top = alternatives[0] or {}
+            text = (top.get("transcript") or "").strip()
+            if text:
+                transcripts.append(text)
+        return " ".join(transcripts).strip()
+
+    async def synthesize(self, text: str, voice: str | None = None) -> str:
+        cleaned = (text or "").strip()
+        if not cleaned:
+            return "audio://placeholder"
+
+        token = await self._access_token()
+        url = "https://texttospeech.googleapis.com/v1/text:synthesize"
+        language_code = self._tts_language_code()
+        voice_name = (voice or self._settings.gcp_tts_voice or "").strip() or None
+        voice_obj: dict[str, Any] = {"languageCode": language_code}
+        if voice_name:
+            voice_obj["name"] = voice_name
+        payload = {
+            "input": {"text": cleaned},
+            "voice": voice_obj,
+            "audioConfig": {"audioEncoding": self._settings.gcp_tts_audio_encoding},
+        }
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+        }
+        timeout = httpx.Timeout(self._settings.gcp_timeout_seconds, connect=6.0)
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            resp = await client.post(url, headers=headers, json=payload)
+            resp.raise_for_status()
+            data = resp.json()
+        audio_content = data.get("audioContent")
+        if not audio_content:
+            raise RuntimeError("GCP TTS returned empty audioContent")
+        return str(audio_content)
+
+    async def healthcheck(self) -> dict[str, Any]:
+        try:
+            token = await self._access_token()
+        except Exception as exc:
+            return {
+                "healthy": False,
+                "provider": self.name,
+                "reason": "credentials_unavailable",
+                "detail": str(exc),
+            }
+        url = "https://texttospeech.googleapis.com/v1/voices"
+        headers = {"Authorization": f"Bearer {token}"}
+        try:
+            timeout = httpx.Timeout(4.0, connect=2.0)
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                resp = await client.get(
+                    url,
+                    headers=headers,
+                    params={"languageCode": self._tts_language_code()},
+                )
                 resp.raise_for_status()
             return {"healthy": True, "provider": self.name}
         except Exception as exc:  # pragma: no cover - network dependent
@@ -167,6 +359,8 @@ class SpeechService:
             return self._provider_override
         if self._settings.provider == "openai" and self._settings.openai_api_key:
             return OpenAISpeechProvider(self._settings)
+        if self._settings.provider == "gcp":
+            return GoogleCloudSpeechProvider(self._settings)
         return StubSpeechProvider()
 
     def _fallback_provider(self) -> SpeechProvider:
@@ -197,7 +391,9 @@ class SpeechService:
                 fallback = self._fallback_provider()
                 self._last_used_fallback = True
                 try:
-                    return await fallback.transcribe(audio)
+                    result = await fallback.transcribe(audio)
+                    self._trip_circuit()
+                    return result
                 except Exception:
                     logger.warning(
                         "speech_fallback_transcribe_failed",
@@ -222,7 +418,9 @@ class SpeechService:
                 fallback = self._fallback_provider()
                 self._last_used_fallback = True
                 try:
-                    return await fallback.synthesize(text, voice=voice)
+                    result = await fallback.synthesize(text, voice=voice)
+                    self._trip_circuit()
+                    return result
                 except Exception:
                     logger.warning(
                         "speech_fallback_synthesize_failed",

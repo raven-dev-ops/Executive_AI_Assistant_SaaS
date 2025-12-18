@@ -1103,6 +1103,10 @@ def test_twilio_voice_silence_fallbacks_to_voicemail():
 )
 def test_speech_circuit_alerts_owner_once(monkeypatch):
     metrics.speech_alerted_businesses.clear()
+    from app.services import owner_notifications
+
+    owner_notifications._last_notification.clear()  # type: ignore[attr-defined]
+    owner_notifications._last_body_hash.clear()  # type: ignore[attr-defined]
     original_until = getattr(speech_service, "_circuit_open_until", None)
     try:
         session = SessionLocal()

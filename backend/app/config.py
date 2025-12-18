@@ -29,13 +29,18 @@ class CalendarSettings(BaseModel):
 
 
 class SpeechSettings(BaseModel):
-    provider: str = "stub"  # "stub" or "openai"
+    provider: str = "stub"  # "stub", "openai", "gcp"
     openai_api_key: str | None = None
     openai_api_base: str = "https://api.openai.com/v1"
     openai_tts_model: str = "gpt-4o-mini"
     openai_tts_voice: str = "alloy"
     openai_stt_model: str = "gpt-4o-mini-transcribe"
     openai_chat_model: str = "gpt-4o-mini"
+    gcp_language_code: str = "en-US"
+    gcp_stt_model: str = "default"
+    gcp_tts_voice: str | None = None
+    gcp_tts_audio_encoding: str = "MP3"
+    gcp_timeout_seconds: float = 12.0
 
 
 class NluSettings(BaseModel):
@@ -225,6 +230,11 @@ class AppSettings(BaseModel):
             openai_tts_voice=os.getenv("OPENAI_TTS_VOICE", "alloy"),
             openai_stt_model=os.getenv("OPENAI_STT_MODEL", "gpt-4o-mini-transcribe"),
             openai_chat_model=os.getenv("OPENAI_CHAT_MODEL", "gpt-4o-mini"),
+            gcp_language_code=os.getenv("GCP_SPEECH_LANGUAGE_CODE", "en-US"),
+            gcp_stt_model=os.getenv("GCP_STT_MODEL", "default"),
+            gcp_tts_voice=os.getenv("GCP_TTS_VOICE"),
+            gcp_tts_audio_encoding=os.getenv("GCP_TTS_AUDIO_ENCODING", "MP3"),
+            gcp_timeout_seconds=float(os.getenv("GCP_SPEECH_TIMEOUT_SECONDS", "12")),
         )
         nlu = NluSettings(
             intent_provider=os.getenv("NLU_PROVIDER", "heuristic"),

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hmac
 import hashlib
 import json
 import logging
@@ -94,15 +95,26 @@ def _derive_actor(request: Request) -> RequestActor:
 
 
 def hash_value(value: str | None) -> str | None:
-    """Return a stable, salted hash suitable for logs/storage (no raw PII)."""
+    """Return a stable, keyed fingerprint suitable for logs/storage (no raw PII).
+
+    This is not intended for password storage; it is used to avoid storing raw
+    tokens/IPs while still allowing correlation across events.
+    """
     if not value:
         return None
     salt = os.getenv("AUDIT_HASH_SALT", "")
+    key = salt.encode("utf-8")
+    if not key:
+        # Fall back to the auth secret so non-dev deployments remain keyed even
+        # when AUDIT_HASH_SALT is not configured.
+        from ..config import get_settings
+
+        key = get_settings().auth.secret.encode("utf-8")
     try:
-        digest = hashlib.blake2b(
+        digest = hmac.new(
+            key,
             value.encode("utf-8"),
-            key=salt.encode("utf-8"),
-            digest_size=16,
+            digestmod=hashlib.sha256,
         ).hexdigest()
     except Exception:
         return None

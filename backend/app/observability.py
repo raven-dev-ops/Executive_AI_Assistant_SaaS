@@ -5,7 +5,10 @@ import os
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
-import sentry_sdk
+try:
+    import sentry_sdk
+except Exception:  # pragma: no cover - optional dependency
+    sentry_sdk = None
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +68,10 @@ def init_sentry() -> bool:
     dsn = (os.getenv("SENTRY_DSN") or "").strip()
     if not dsn:
         _SENTRY_ENABLED = False
+        return False
+    if sentry_sdk is None:
+        _SENTRY_ENABLED = False
+        logger.warning("sentry_sdk_missing")
         return False
 
     environment = (

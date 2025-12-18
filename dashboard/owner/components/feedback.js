@@ -71,6 +71,7 @@ export function initFeedbackModal({ authorizedFetch }) {
 
   feedbackForm?.addEventListener("submit", async (evt) => {
     evt.preventDefault();
+    const urlObj = new URL(window.location.href);
     const payload = {
       category: document.getElementById("feedback-category")?.value || "bug",
       summary: (document.getElementById("feedback-summary")?.value || "").trim(),
@@ -79,6 +80,8 @@ export function initFeedbackModal({ authorizedFetch }) {
       actual: (document.getElementById("feedback-actual")?.value || "").trim() || null,
       call_sid: (document.getElementById("feedback-call-sid")?.value || "").trim() || null,
       contact: (document.getElementById("feedback-contact")?.value || "").trim() || null,
+      conversation_id: urlObj.searchParams.get("conversation_id") || null,
+      session_id: urlObj.searchParams.get("session_id") || null,
       url: window.location.href,
     };
 

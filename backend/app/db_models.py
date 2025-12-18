@@ -231,6 +231,26 @@ if TYPE_CHECKING or SQLALCHEMY_AVAILABLE:
         request_id = Column(String, nullable=True, index=True)
         meta = Column(Text, nullable=True)
 
+    class FeedbackDB(Base):
+        __tablename__ = "feedback_entries"
+
+        id = Column(Integer, primary_key=True, autoincrement=True)
+        created_at = Column(DateTime, nullable=False, default=_utcnow, index=True)
+        business_id = Column(String, nullable=True, index=True)
+        source = Column(String, nullable=False, default="unknown", index=True)
+        category = Column(String, nullable=True, index=True)
+        summary = Column(String, nullable=False)
+        steps = Column(Text, nullable=True)
+        expected = Column(Text, nullable=True)
+        actual = Column(Text, nullable=True)
+        call_sid = Column(String, nullable=True, index=True)
+        conversation_id = Column(String, nullable=True, index=True)
+        session_id = Column(String, nullable=True, index=True)
+        request_id = Column(String, nullable=True, index=True)
+        url = Column(String, nullable=True)
+        contact = Column(String, nullable=True)
+        user_agent = Column(Text, nullable=True)
+
     class SmsAuditDB(Base):
         __tablename__ = "sms_audit"
 
@@ -324,6 +344,10 @@ else:  # pragma: no cover - for environments without SQLAlchemy
 
     class SecurityEventDB:
         __tablename__ = "security_events"
+        id: int
+
+    class FeedbackDB:
+        __tablename__ = "feedback_entries"
         id: int
 
     class SmsAuditDB:

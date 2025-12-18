@@ -1001,6 +1001,101 @@
           <button id="refresh-audit" type="button" style="width: 100%; margin-top: 1rem;">Refresh Audit Log</button>
         </div>
 
+        <!-- Feedback -->
+        <div class="card" style="grid-column: span 2;">
+          <div class="card-header">
+            <div class="card-icon">
+              <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path d="M20 2H4c-1.1 0-2 .9-2 2v15.59L5.41 17H20c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM6 10h12v2H6v-2zm8-3H6V5h8v2zm4 8H6v-2h12v2z"/>
+              </svg>
+            </div>
+            <h2>Feedback</h2>
+          </div>
+          <div class="info-grid" style="grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));">
+            <div class="form-group">
+              <label>
+                <small>Tenant ID</small>
+                <input id="feedback-business-id" type="text" placeholder="optional" />
+              </label>
+            </div>
+            <div class="form-group">
+              <label>
+                <small>Source</small>
+                <select id="feedback-source">
+                  <option value="">Any</option>
+                  <option value="widget">Widget</option>
+                  <option value="owner_dashboard">Owner</option>
+                  <option value="tenant_api">Tenant API</option>
+                  <option value="admin">Admin</option>
+                  <option value="anonymous">Anonymous</option>
+                </select>
+              </label>
+            </div>
+            <div class="form-group">
+              <label>
+                <small>Category</small>
+                <select id="feedback-category">
+                  <option value="">Any</option>
+                  <option value="bug">Bug</option>
+                  <option value="idea">Idea</option>
+                  <option value="support">Support</option>
+                  <option value="other">Other</option>
+                </select>
+              </label>
+            </div>
+            <div class="form-group">
+              <label>
+                <small>Window</small>
+                <select id="feedback-since-minutes">
+                  <option value="">Any Time</option>
+                  <option value="60">Last Hour</option>
+                  <option value="240">Last 4 Hours</option>
+                  <option value="1440">Last 24 Hours</option>
+                  <option value="10080">Last 7 Days</option>
+                </select>
+              </label>
+            </div>
+            <div class="form-group">
+              <label>
+                <small>Call SID</small>
+                <input id="feedback-call-sid" type="text" placeholder="optional" />
+              </label>
+            </div>
+            <div class="form-group">
+              <label>
+                <small>Conversation ID</small>
+                <input id="feedback-conversation-id" type="text" placeholder="optional" />
+              </label>
+            </div>
+            <div class="form-group">
+              <label>
+                <small>Session ID</small>
+                <input id="feedback-session-id" type="text" placeholder="optional" />
+              </label>
+            </div>
+            <div class="form-group">
+              <label>
+                <small>Request ID</small>
+                <input id="feedback-request-id" type="text" placeholder="optional" />
+              </label>
+            </div>
+            <div class="form-group">
+              <label>
+                <small>Limit</small>
+                <select id="feedback-limit">
+                  <option value="100">100</option>
+                  <option value="200" selected>200</option>
+                  <option value="500">500</option>
+                </select>
+              </label>
+            </div>
+          </div>
+          <div id="feedback-content">
+            <div class="loading">Loading feedback</div>
+          </div>
+          <button id="refresh-feedback" type="button" style="width: 100%; margin-top: 1rem;">Refresh Feedback</button>
+        </div>
+
         <!-- Admin Runbook -->
         <div class="card">
           <div class="card-header">
@@ -1477,6 +1572,137 @@
         el.innerHTML = '<div class="empty-state"><p>No audit events</p></div>';
       }
 
+      function formatTimestamp(value) {
+        if (!value) return "";
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return String(value);
+        return date.toLocaleString();
+      }
+
+      async function loadFeedback() {
+        const el = document.getElementById("feedback-content");
+        if (!el) return;
+        el.innerHTML = '<div class="loading">Loading feedback</div>';
+
+        try {
+          const params = new URLSearchParams();
+          const businessId = document.getElementById("feedback-business-id")?.value?.trim();
+          const source = document.getElementById("feedback-source")?.value?.trim();
+          const category = document.getElementById("feedback-category")?.value?.trim();
+          const callSid = document.getElementById("feedback-call-sid")?.value?.trim();
+          const conversationId = document.getElementById("feedback-conversation-id")?.value?.trim();
+          const sessionId = document.getElementById("feedback-session-id")?.value?.trim();
+          const requestId = document.getElementById("feedback-request-id")?.value?.trim();
+          const sinceMinutes = document.getElementById("feedback-since-minutes")?.value?.trim();
+          const limit = document.getElementById("feedback-limit")?.value?.trim();
+
+          if (businessId) params.set("business_id", businessId);
+          if (source) params.set("source", source);
+          if (category) params.set("category", category);
+          if (callSid) params.set("call_sid", callSid);
+          if (conversationId) params.set("conversation_id", conversationId);
+          if (sessionId) params.set("session_id", sessionId);
+          if (requestId) params.set("request_id", requestId);
+          if (sinceMinutes) params.set("since_minutes", sinceMinutes);
+          if (limit) params.set("limit", limit);
+
+          const data = await fetchJson(`/v1/admin/feedback?${params.toString()}`);
+          const items = Array.isArray(data?.feedback) ? data.feedback : [];
+          if (!items.length) {
+            el.innerHTML = '<div class="empty-state"><p>No feedback found</p></div>';
+            return;
+          }
+
+          const rows = items
+            .map((item) => {
+              const createdAt = escapeHtml(formatTimestamp(item.created_at));
+              const tenant = escapeHtml(item.business_id || "");
+              const itemSource = escapeHtml(item.source || "");
+              const itemCategory = escapeHtml(item.category || "");
+              const summary = escapeHtml(item.summary || "");
+              const steps = escapeHtml(item.steps || "");
+              const expected = escapeHtml(item.expected || "");
+              const actual = escapeHtml(item.actual || "");
+              const call = escapeHtml(item.call_sid || "");
+              const conv = escapeHtml(item.conversation_id || "");
+              const sess = escapeHtml(item.session_id || "");
+              const req = escapeHtml(item.request_id || "");
+              const url = escapeHtml(item.url || "");
+              const contact = escapeHtml(item.contact || "");
+              const ua = escapeHtml(item.user_agent || "");
+              const id = escapeHtml(item.id || "");
+
+              const contextLines = [
+                call ? `call_sid: ${call}` : "",
+                conv ? `conversation_id: ${conv}` : "",
+                sess ? `session_id: ${sess}` : "",
+                req ? `request_id: ${req}` : "",
+              ].filter(Boolean);
+
+              const detailsParts = [
+                steps ? `<div style="margin-top:0.75rem;"><strong>Steps</strong><pre style="white-space:pre-wrap; margin:0.25rem 0 0;">${steps}</pre></div>` : "",
+                expected
+                  ? `<div style="margin-top:0.75rem;"><strong>Expected</strong><pre style="white-space:pre-wrap; margin:0.25rem 0 0;">${expected}</pre></div>`
+                  : "",
+                actual
+                  ? `<div style="margin-top:0.75rem;"><strong>Actual</strong><pre style="white-space:pre-wrap; margin:0.25rem 0 0;">${actual}</pre></div>`
+                  : "",
+                url ? `<div style="margin-top:0.75rem;"><strong>URL</strong><div><small>${url}</small></div></div>` : "",
+                ua ? `<div style="margin-top:0.75rem;"><strong>User Agent</strong><div><small>${ua}</small></div></div>` : "",
+              ].filter(Boolean);
+
+              const summaryCell = detailsParts.length
+                ? `<details><summary>${summary || "(no summary)"}</summary>${detailsParts.join("")}</details>`
+                : summary || '<span class="muted">—</span>';
+
+              const contextCell = contextLines.length
+                ? contextLines.map((line) => `<div><small>${line}</small></div>`).join("")
+                : '<span class="muted">—</span>';
+
+              const idCell = id ? `<div><small>id: ${id}</small></div>` : "";
+              const contactCell = contact ? `<div><small>${contact}</small></div>` : '<span class="muted">—</span>';
+
+              return `
+                <tr>
+                  <td>${createdAt}</td>
+                  <td>${tenant || '<span class="muted">—</span>'}${idCell}</td>
+                  <td>${itemSource || '<span class="muted">—</span>'}</td>
+                  <td>${itemCategory || '<span class="muted">—</span>'}</td>
+                  <td>${summaryCell}</td>
+                  <td>${contextCell}</td>
+                  <td>${contactCell}</td>
+                </tr>
+              `;
+            })
+            .join("");
+
+          el.innerHTML = `
+            <div class="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Created</th>
+                    <th>Tenant</th>
+                    <th>Source</th>
+                    <th>Category</th>
+                    <th>Summary</th>
+                    <th>Context</th>
+                    <th>Contact</th>
+                  </tr>
+                </thead>
+                <tbody>${rows}</tbody>
+              </table>
+            </div>
+          `;
+        } catch (err) {
+          console.error("loadFeedback failed", err);
+          el.innerHTML =
+            '<div class="empty-state"><p>Unable to load feedback</p><small>' +
+            escapeHtml(err.message || err) +
+            "</small></div>";
+        }
+      }
+
       // Wire buttons
       document.getElementById("refresh-tenants")?.addEventListener("click", loadTenants);
       document.getElementById("refresh-usage")?.addEventListener("click", loadUsage);
@@ -1485,6 +1711,7 @@
       document.getElementById("refresh-gcp-storage")?.addEventListener("click", loadGcpStorageHealth);
       document.getElementById("refresh-governance")?.addEventListener("click", loadGovernance);
       document.getElementById("refresh-audit")?.addEventListener("click", loadAudit);
+      document.getElementById("refresh-feedback")?.addEventListener("click", loadFeedback);
 
       // Tour functionality
       const tourOverlay = document.getElementById("admin-tour-overlay");
@@ -1521,6 +1748,7 @@
       loadGcpStorageHealth();
       loadGovernance();
       loadAudit();
+      loadFeedback();
 
       // Helpers
       function formatNumber(value) {

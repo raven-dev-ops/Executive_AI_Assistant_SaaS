@@ -1,3 +1,5 @@
+import asyncio
+
 import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
@@ -135,8 +137,7 @@ def test_auth_callback_rejects_invalid_state_when_not_testing(monkeypatch) -> No
     assert resp.json()["detail"] == "Invalid state"
 
 
-@pytest.mark.anyio
-async def test_auth_callback_rejects_provider_mismatch(monkeypatch) -> None:
+def test_auth_callback_rejects_provider_mismatch(monkeypatch) -> None:
     from app.routers import auth_integration
     from app.services.oauth_state import encode_state
 
@@ -161,11 +162,13 @@ async def test_auth_callback_rejects_provider_mismatch(monkeypatch) -> None:
     business_id = _get_default_business_id()
     state = encode_state(business_id, "gmail", "secret")
     with pytest.raises(HTTPException) as excinfo:
-        await auth_integration.auth_callback(
-            provider="gcalendar",
-            state=state,
-            code="dummy",
-            error=None,
+        asyncio.run(
+            auth_integration.auth_callback(
+                provider="gcalendar",
+                state=state,
+                code="dummy",
+                error=None,
+            )
         )
 
     assert excinfo.value.status_code == 400

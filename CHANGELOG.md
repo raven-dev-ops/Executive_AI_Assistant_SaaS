@@ -17,6 +17,7 @@ Release notes here summarize work that implements or documents the design descri
 
 [Unreleased]
 ------------
+- Process: track AGENTS.md in-repo and require PR creation/push for all improvements.
 
 - Implemented initial backend voice assistant, CRM, multi-tenant support, and dashboard prototype as described in the project documentation.
 - Documented SMS opt-out behavior and Twilio wiring in `README.md`, `PRIVACY_POLICY.md`, and `RUNBOOK.md`.
@@ -35,6 +36,16 @@ Release notes here summarize work that implements or documents the design descri
 - Testing/guardrails: added admin route regression checks, end-to-end signup→voice scheduling flow, load-smoke context test, and subscription enforcement guardrail coverage.
 - Twilio voice streaming now enqueues missed/partial calls into the callback queue, sends owner alerts, and includes signature validation tests for voice and status webhooks; voice-assistant completions also enqueue callback follow-ups.
 - Stripe billing now favors live Checkout/Customer Portal when configured, verifies webhook signatures with replay protection, records plan/service tier from Stripe metadata, emails owners on payment failures, and enforces subscription status across voice/Twilio/voice-session APIs with dashboard warnings.
+
+
+
+[0.1.1] - 2026-01-05
+-------------------
+
+- Allow Stripe webhooks to bypass owner auth while preserving signature and replay protection.
+- Sign QuickBooks OAuth state and validate callbacks without owner tokens in production flows.
+- Enable proxy headers in the container for correct scheme/host behind Cloud Run.
+- Documentation updates for webhook auth, OAuth state signing, and proxy header guidance.
 
 
 [0.2.0] – TBD (example)

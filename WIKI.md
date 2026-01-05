@@ -65,6 +65,7 @@ the Bristol Plumbing PDFs and the RavDevOps engineering whitepaper.
   - Payment link: `https://buy.stripe.com/test_28E28kfa82sPc3m2zxfYY00`
   - Billing portal link: `https://billing.stripe.com/p/login/test_28E28kfa82sPc3m2zxfYY00`
   - Webhook endpoint: `https://ai-telephony-backend-215484517190.us-central1.run.app/v1/billing/webhook` (secret in `stripe-webhook-secret`, signature verification enabled).
+- **OAuth state**: `AUTH_STATE_SECRET` signs OAuth state for integrations (QBO, Gmail, Google Calendar); callbacks are public but validated by signature/state.
 - **Dashboards/Storage**: GCS bucket `ai-telephony-dash-poc-mpf-dmxmytcubly9` for dashboard assets. Cloud Run proxy/dashboards use private egress via VPC connector.
 
 5. Developer Operations

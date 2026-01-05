@@ -25,6 +25,23 @@ class DummyQuickBooks:
 class DummySettings:
     def __init__(self) -> None:
         self.quickbooks = DummyQuickBooks()
+        self.oauth = type("OAuth", (), {"state_secret": "state-secret"})()
+
+
+def test_qbo_authorize_uses_signed_state(monkeypatch):
+    from app.routers import qbo_integration
+
+    monkeypatch.setattr(qbo_integration, "_is_testing_mode", lambda: False)
+    monkeypatch.setattr(qbo_integration, "get_settings", lambda: DummySettings())
+
+    resp = client.get("/v1/integrations/qbo/authorize")
+    assert resp.status_code == 200
+    data = resp.json()
+    business_id, provider = qbo_integration.decode_state(
+        data["state"], "state-secret"
+    )
+    assert business_id == "default_business"
+    assert provider == "quickbooks"
 
 
 def test_qbo_callback_stub_when_not_configured(monkeypatch):
@@ -43,11 +60,16 @@ def test_qbo_callback_stub_when_not_configured(monkeypatch):
     class SettingsNoCreds:
         def __init__(self) -> None:
             self.quickbooks = NoCreds()
+            self.oauth = type("OAuth", (), {"state_secret": "state-secret"})()
 
+    monkeypatch.setattr(qbo_integration, "_is_testing_mode", lambda: False)
     monkeypatch.setattr(qbo_integration, "get_settings", lambda: SettingsNoCreds())
+    state = qbo_integration.encode_state(
+        "default_business", "quickbooks", "state-secret"
+    )
     resp = client.get(
         "/v1/integrations/qbo/callback",
-        params={"code": "stubcode", "state": "default_business"},
+        params={"code": "stubcode", "state": state},
     )
     assert resp.status_code == 200
     assert resp.json()["connected"] is True

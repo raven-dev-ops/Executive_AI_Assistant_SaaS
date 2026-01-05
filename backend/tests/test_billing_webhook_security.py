@@ -35,6 +35,7 @@ def test_webhook_accepts_valid_signature_and_prevents_replay(monkeypatch):
     settings.stripe.verify_signatures = True
     settings.stripe.webhook_secret = "whsec_test"
     settings.stripe.replay_protection_seconds = 300
+    monkeypatch.setattr(settings, "owner_dashboard_token", "owner-token")
 
     payload = {
         "id": "evt_valid",

@@ -124,6 +124,11 @@ docker build -t ai-telephony-backend ./backend
 docker run --rm -p 8000:8000 ai-telephony-backend
 ```
 
+When running behind a reverse proxy (Cloud Run, load balancer), enable proxy headers so
+URL generation uses the forwarded scheme/host. The container CMD already sets
+`--proxy-headers --forwarded-allow-ips=*`; for other entrypoints, mirror those flags or
+override with `TWILIO_STREAM_BASE_URL` and `OAUTH_REDIRECT_BASE`.
+
 
 Observability (Sentry + Uptime Checks)
 -------------------------------------

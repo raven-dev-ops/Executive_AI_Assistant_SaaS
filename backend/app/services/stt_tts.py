@@ -187,14 +187,18 @@ class GoogleCloudSpeechProvider(SpeechProvider):
             def _refresh_sync() -> str:
                 request_cls: Any
                 try:
-                    from google.auth.transport.requests import Request as _Request
+                    from google.auth.transport.requests import (
+                        Request as _RequestsRequest,
+                    )
 
-                    request_cls = _Request
+                    request_cls = _RequestsRequest
                 except Exception:
                     try:
-                        from google.auth.transport.urllib3 import Request as _Request
+                        from google.auth.transport.urllib3 import (
+                            Request as _Urllib3Request,
+                        )
 
-                        request_cls = _Request
+                        request_cls = _Urllib3Request
                     except Exception as exc:
                         raise RuntimeError(
                             "google-auth transport is required for GCP speech provider"

@@ -30,7 +30,7 @@ except Exception:  # pragma: no cover - optional dependency
     stripe = None
 
 
-router = APIRouter(dependencies=[Depends(require_owner_dashboard_auth)])
+router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
@@ -111,7 +111,11 @@ def _plans_from_settings() -> List[Plan]:
     ]
 
 
-@router.get("/plans", response_model=List[Plan])
+@router.get(
+    "/plans",
+    response_model=List[Plan],
+    dependencies=[Depends(require_owner_dashboard_auth)],
+)
 def list_plans() -> List[Plan]:
     """Return available subscription plans."""
     return _plans_from_settings()
@@ -182,7 +186,11 @@ def _get_or_create_customer(business_id: str, email: Optional[str]) -> str:
         session.close()
 
 
-@router.post("/create-checkout-session", response_model=CheckoutSessionResponse)
+@router.post(
+    "/create-checkout-session",
+    response_model=CheckoutSessionResponse,
+    dependencies=[Depends(require_owner_dashboard_auth)],
+)
 def create_checkout_session(
     plan_id: str,
     customer_email: Optional[str] = None,
@@ -236,7 +244,11 @@ def create_checkout_session(
         raise HTTPException(status_code=502, detail="Stripe checkout failed") from exc
 
 
-@router.get("/portal-link", response_model=BillingPortalResponse)
+@router.get(
+    "/portal-link",
+    response_model=BillingPortalResponse,
+    dependencies=[Depends(require_owner_dashboard_auth)],
+)
 def get_billing_portal_link(
     business_id: str = Depends(ensure_business_active),
 ) -> BillingPortalResponse:
@@ -298,7 +310,11 @@ def _plan_from_event_obj(obj: dict[str, object]) -> str | None:
     return plan_id
 
 
-@router.get("/subscription/status", response_model=SubscriptionStatusResponse)
+@router.get(
+    "/subscription/status",
+    response_model=SubscriptionStatusResponse,
+    dependencies=[Depends(require_owner_dashboard_auth)],
+)
 async def get_subscription_status(
     business_id: str = Depends(ensure_business_active),
 ) -> SubscriptionStatusResponse:

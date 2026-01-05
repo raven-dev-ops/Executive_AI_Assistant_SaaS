@@ -91,7 +91,7 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title="AI Telephony Backend",
         description="Backend for AI voice assistant, scheduling, and basic CRM.",
-        version="0.1.0",
+        version="0.1.1",
     )
 
     # Log a brief configuration summary for operational visibility.

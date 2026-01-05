@@ -46,6 +46,7 @@ Release notes here summarize work that implements or documents the design descri
 - Sign QuickBooks OAuth state and validate callbacks without owner tokens in production flows.
 - Enable proxy headers in the container for correct scheme/host behind Cloud Run.
 - Documentation updates for webhook auth, OAuth state signing, and proxy header guidance.
+- CI: fix mypy typing for GCP speech credentials to unblock Backend CI.
 
 
 [0.2.0] – TBD (example)

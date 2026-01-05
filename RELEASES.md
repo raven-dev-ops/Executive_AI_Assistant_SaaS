@@ -43,6 +43,7 @@ Date: 2026-01-05
 - QuickBooks OAuth uses signed state and allows public callback validation for production flows.
 - Backend container enables proxy headers to preserve scheme/host behind Cloud Run.
 - Docs updated with webhook/OAuth/proxy guidance.
+- CI typing fix for GCP speech credentials to keep mypy green.
 
 
 0.2.0 - Load Testing & Ops Docs (example)

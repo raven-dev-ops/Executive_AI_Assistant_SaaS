@@ -42,6 +42,13 @@ Release notes here summarize work that implements or documents the design descri
 
 
 
+[0.1.3] - 2026-01-06
+-------------------
+
+- Backend: add Twilio Media Streams WebSocket ingest with mu-law conversion and transcript forwarding.
+- Config: expose `TWILIO_STREAM_MIN_SECONDS` to tune minimum stream buffer duration before transcription.
+
+
 [0.1.2] - 2026-01-06
 -------------------
 
